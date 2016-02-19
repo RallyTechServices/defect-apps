@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Defects by Field Value</title>
+    <!--  (c) 2015 Rally Software Development Corp.  All Rights Reserved. -->
+    <!--  Build Date: Fri Feb 19 2016 15:14:01 GMT-0700 (MST) -->
+    
+    <script type="text/javascript">
+        var APP_BUILD_DATE = "Fri Feb 19 2016 15:14:01 GMT-0700 (MST)";
+        var CHECKSUM = 4158012680;
+    </script>
+    
+    <script type="text/javascript" src="/apps/2.0/sdk.js"></script>
+
+    <script type="text/javascript">
+        Rally.onReady(function() {
+             
+/**
+ * A link that pops up a version dialog box
+ */
+
+Ext.define('Rally.technicalservices.InfoLink',{
+    extend: 'Rally.ui.dialog.Dialog',
+    alias: 'widget.tsinfolink',
+    
+    /**
+     * @cfg {String} informationHtml
+     * Additional text to be displayed on the popup dialog (for exmaple,
+     * to add a description of the app's use or functionality)
+     */
+    informationHtml: null,
+    
+    /**
+     * 
+     * cfg {String} title
+     * The title for the dialog box
+     */
+    title: "Build Information",
+    
+    defaults: { padding: 5, margin: 5 },
+
+    closable: true,
+     
+    draggable: true,
+
+    autoShow: true,
+   
+    width: 350, 
+    
+    initComponent: function() {
+        var id = Ext.id(this);
+        this.title =  "<span class='icon-help'> </span>" + this.title;
+        this.callParent(arguments);
+    },
+    
+    _generateChecksum: function(string){
+        var chk = 0x12345678,
+            i;
+        string = string.replace(/var CHECKSUM = .*;/,"");
+        string = string.replace(/\s/g,"");  //Remove all whitespace from the string.
+        
+        for (i = 0; i < string.length; i++) {
+            chk += (string.charCodeAt(i) * i);
+        }
+    
+        return chk;
+    },
+    
+    _checkChecksum: function(container) {
+        var deferred = Ext.create('Deft.Deferred');
+        console.log("_checkChecksum", container);
+        var me = this;
+        
+        Ext.Ajax.request({
+            url: document.URL,
+            params: {
+                id: 1
+            },
+            success: function (response) {
+                text = response.responseText;
+                if ( CHECKSUM ) {
+                    if ( CHECKSUM !== me._generateChecksum(text) ) {
+                        console.log("Checksums don't match!");
+                        deferred.resolve(false);
+                        return;
+                    }
+                }
+                deferred.resolve(true);
+            }
+        });
+        
+        return deferred.promise;
+    },
+    
+    afterRender: function() {
+        var app = Rally.getApp();
+        
+        if (! app.isExternal() ) {
+                
+            this._checkChecksum(app).then({
+                scope: this,
+                success: function(result){
+                    if ( !result ) {
+                        this.addDocked({
+                            xtype:'container',
+                            cls: 'build-info',
+                            padding: 2,
+                            html:'<span class="icon-warning"> </span>Checksums do not match'
+                        });
+                    }
+                },
+                failure: function(msg){
+                    console.log("oops:",msg);
+                }
+            });
+        } else {
+            this.addDocked({
+                xtype:'container',
+                cls: 'build-info',
+                padding: 2,
+                html:'... Running externally'
+            });
+        }
+        this.callParent(arguments);
+    },
+    
+    beforeRender: function() {
+        var me = this;
+        this.callParent(arguments);
+
+        if (this.informationHtml) {
+            this.addDocked({
+                xtype: 'component',
+                componentCls: 'intro-panel',
+                padding: 2,
+                html: this.informationHtml
+            });
+        }
+        
+        this.addDocked({
+            xtype:'container',
+            cls: 'build-info',
+            padding: 2,
+            html:"This app was created by the Rally Technical Services Team."
+        });
+        
+        if ( APP_BUILD_DATE ) {
+            this.addDocked({
+                xtype:'container',
+                cls: 'build-info',
+                padding: 2,
+                html:'Build date/time: ' + APP_BUILD_DATE
+            });
+        }
+    }
+});
+
+/*
+ */
+Ext.define('Rally.technicalservices.Logger',{
+    constructor: function(config){
+        Ext.apply(this,config);
+    },
+    log: function(args){
+        var timestamp = "[ " + Ext.util.Format.date(new Date(), "Y-m-d H:i:s.u") + " ]";
+        //var output_args = arguments;
+        //output_args.unshift( [ "[ " + timestamp + " ]" ] );
+        //output_args = Ext.Array.push(output_args,arguments);
+        
+        var output_args = [];
+        output_args = Ext.Array.push(output_args,[timestamp]);
+        output_args = Ext.Array.push(output_args, Ext.Array.slice(arguments,0));
+
+        window.console && console.log.apply(console,output_args);
+    }
+
+});
+
+Ext.define('Rally.ui.combobox.FieldOptionsCombobox', {
+    requires: [],
+    extend: 'Rally.ui.combobox.FieldComboBox',
+    alias: 'widget.tsfieldoptionscombobox',
+
+    _isNotHidden: function(field) {
+        if (field && field.attributeDefinition ){
+            return field.attributeDefinition.Constrained && field.attributeDefinition.AttributeType != 'COLLECTION';
+        }
+        return false;
+    },
+    _populateStore: function() {
+        if (!this.store) {
+            return;
+        }
+        var data = _.sortBy(
+            _.map(
+                _.filter(this.model.getFields(), this._isNotHidden),
+                this._convertFieldToLabelValuePair,
+                this
+            ),
+            'name'
+        );
+
+        if (this.allowNoEntry){
+            data.unshift({name: this.noEntryText, value: null});
+        }
+        this.store.loadRawData(data);
+        this.setDefaultValue();
+        this.onReady();
+    }
+});
+Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
+    singleton: true,
+
+    getFields: function(settings){
+        var labelWidth = 100,
+            width = 250;
+        console.log('settings',settings);
+        return [{
+            xtype: 'tsfieldoptionscombobox',
+            name: 'bucketField',
+            fieldLabel: 'Bucket by',
+            labelWidth: labelWidth,
+            labelAlign: 'right',
+            width: width,
+            model: settings.modelName,
+            allowNoEntry: false
+        },{
+            xtype: 'rallyfieldvaluecombobox',
+            name: 'allowedStates',
+            fieldLabel: 'Include Defect States',
+            labelWidth: labelWidth,
+            width: width,
+            labelAlign: 'right',
+            multiSelect: true,
+            model: settings.modelName,
+            value: settings.allowedStates,
+            field: 'State'
+        },{
+            xtype: 'tsfieldoptionscombobox',
+            name: 'stackField',
+            fieldLabel: 'Stacks',
+            model: settings.modelName,
+            labelWidth: labelWidth,
+            width: width,
+            labelAlign: 'right',
+            allowNoEntry: true,
+            noEntryText: '-- No Stacks --',
+            noEntryValue: null
+        }];
+    }
+});
+
+Ext.define("defects-by-field-chart", {
+    extend: 'Rally.app.App',
+    componentCls: 'app',
+    logger: new Rally.technicalservices.Logger(),
+    defaults: { margin: 10 },
+
+    config: {
+        defaultSettings: {
+            stackField: null,
+            bucketField: 'Project',
+            allowedStates: ['Open'],
+            modelName: 'Defect',
+            alwaysFetch: ['FormattedID','ObjectID','State'],
+            noEntryText: '(No Entry)'
+        }
+    },
+
+    integrationHeaders : {
+        name : "defects-by-field-chart"
+    },
+                        
+    launch: function() {
+        this._updateDisplay();
+    },
+    _updateDisplay: function(){
+        this.removeAll();
+
+        if (!this._validateSettings(this.getSettings())){
+            return;
+        }
+
+        this._fetchData(this._getStoreConfig(this.getSettings())).then({
+            success: this._buildChart,
+            failure: this._showError,
+            scope: this
+        });
+    },
+    _buildChart: function(records){
+        this.logger.log('_buildChart', records);
+
+        if (!records || records.length === 0){
+            this.add({
+                xtype: 'container',
+                html: 'No records found for the configured settings.'
+            });
+            return;
+        }
+
+        this.add({
+            xtype: 'rallychart',
+            loadMask: false,
+            chartConfig: this._getChartConfig(records),
+            chartData: this._getChartData(records)
+        });
+
+    },
+    _getAllowedStates: function(){
+        var settings = this.getSettings();
+        if (Ext.isString(settings.allowedStates)){
+            return settings.allowedStates.split(',');
+        }
+        return settings.allowedStates;
+    },
+    _getChartConfig: function(records){
+        var field = "Field",
+            settings = this.getSettings(),
+            stackField = null;
+
+        if (records && records.length > 0){
+            field = records[0].getField(settings.bucketField).displayName;
+            if (settings.stackField && settings.stackField.length > 0){
+                stackField = records[0].getField(settings.stackField).displayName;
+            }
+        }
+
+        return {
+            chart: {
+                type: 'column'
+            },
+            title: {
+                text: 'Defects by ' + field
+
+            },
+            yAxis: {
+                title: {
+                    text: 'Count'
+                }
+            },
+            legend: {
+                title: { text: stackField},
+                enabled: settings.stackField && settings.stackField.length > 0,
+                layout: 'vertical',
+                align: 'right',
+                verticalAlign: 'top'
+            },
+            plotOptions: {
+                column: {
+                    stacking: 'normal'
+                }
+
+            }
+        };
+    },
+    _getChartData: function(records){
+        var hash = {},
+            settings=  this.getSettings(),
+            noEntryText = settings.noEntryText,
+            stacks = [];
+
+        Ext.Array.each(records, function(r){
+            var bucket = r.get(settings.bucketField) || noEntryText,
+                stack = "Total";
+
+            if (Ext.isObject(bucket)){
+                bucket = bucket._refObjectName;
+            }
+
+            if (settings.stackField){
+                stack = r.get(settings.stackField) || noEntryText;
+            }
+
+            if (Ext.isObject(stack)){
+                stack = stack._refObjectName;
+            }
+
+            if (!hash[bucket]){
+                hash[bucket] = {};
+            }
+            if (!hash[bucket][stack]){
+                if (!Ext.Array.contains(stacks, stack)){
+                    stacks.push(stack);
+                }
+                hash[bucket][stack] = 0;
+            }
+            hash[bucket][stack]++;
+        });
+
+        var series = [],
+            categories = _.keys(hash);
+
+        _.each(stacks, function(stack){
+            var obj = { name: stack, data: [] }
+            _.each(categories, function(bucket){
+                obj.data.push(hash[bucket][stack] || 0);
+            });
+            series.push(obj);
+        });
+
+        return {
+            series: series,
+            categories: categories
+        };
+    },
+    _showError: function(msg){
+        Rally.ui.notify.Notifier.showError(msg);
+    },
+    _getStoreConfig: function(settings){
+        var fetch = settings.alwaysFetch.concat([settings.bucketField]);
+        if (settings.stackField){
+            fetch.push(settings.stackField);
+        }
+
+        var filters = _.map(this._getAllowedStates(), function(state){ return {property: 'State', value: state}; });
+        filters = Rally.data.wsapi.Filter.or(filters);
+        this.logger.log('_getStoreConfig', filters.toString(), fetch);
+
+        return {
+            model: settings.modelName,
+            fetch: fetch,
+            filters: filters,
+            limit: 'Infinity'
+        };
+    },
+    _validateSettings: function(settings){
+        if (this._getAllowedStates().length > 0){
+            return true;
+        }
+
+        this.add({
+            xtype: 'container',
+            html: 'Please use the app settings to configure at least one Allowed State for the data set.'
+        });
+    },
+    _fetchData: function(config){
+        var deferred = Ext.create('Deft.Deferred'),
+            me = this;
+
+        this.setLoading(true);
+        Ext.create('Rally.data.wsapi.Store',config).load({
+            callback: function(records, operation){
+                me.setLoading(false);
+                me.logger.log('_fetchData', operation, records);
+                if (operation.wasSuccessful()){
+                    deferred.resolve(records);
+                } else {
+                    deferred.reject(operation.error.errors.join(','));
+                }
+            }
+        });
+
+        return deferred;
+    },
+    getSettingsFields: function(){
+        return Rally.technicalservices.DefectsByFieldSettings.getFields(this.getSettings());
+    },
+    getOptions: function() {
+        return [
+            {
+                text: 'About...',
+                handler: this._launchInfo,
+                scope: this
+            }
+        ];
+    },
+    
+    _launchInfo: function() {
+        if ( this.about_dialog ) { this.about_dialog.destroy(); }
+        this.about_dialog = Ext.create('Rally.technicalservices.InfoLink',{});
+    },
+    
+    isExternal: function(){
+        return typeof(this.getAppId()) == 'undefined';
+    },
+    
+    //onSettingsUpdate:  Override
+    onSettingsUpdate: function (settings){
+        this.logger.log('onSettingsUpdate',settings);
+        // Ext.apply(this, settings);
+        this._updateDisplay();
+    }
+});
+
+            
+               Rally.launchApp('defects-by-field-chart', {
+                   name: 'Defects by Field Value'
+               });
+        });
+    </script>
+    
+    <style type="text/css">
+
+.app {
+}
+.tsinfolink {
+    position:absolute;
+    right:0px;
+    width: 14px;
+    height: 14px;
+    border-radius: 7px;
+    text-align: center;
+    color: white;
+    background: #C0C0C0;
+    border-style: solid;
+    border-width: 1px;
+    margin-top: 25px;
+    margin-right: 5px;
+    cursor: pointer;
+}
+    </style>
+
+</head>
+<body></body>
+</html>
