@@ -20,6 +20,15 @@ Ext.define("defects-by-field-chart", {
     },
                         
     launch: function() {
+        this._updateDisplay();
+    },
+    _updateDisplay: function(){
+        this.removeAll();
+
+        if (!this._validateSettings(this.getSettings())){
+            return;
+        }
+
         this._fetchData(this._getStoreConfig(this.getSettings())).then({
             success: this._buildChart,
             failure: this._showError,
@@ -28,23 +37,42 @@ Ext.define("defects-by-field-chart", {
     },
     _buildChart: function(records){
         this.logger.log('_buildChart', records);
-        this.removeAll();
+
+        if (!records || records.length === 0){
+            this.add({
+                xtype: 'container',
+                html: 'No records found for the configured settings.'
+            });
+            return;
+        }
 
         this.add({
             xtype: 'rallychart',
             loadMask: false,
-            chartConfig: this._getChartConfig(),
+            chartConfig: this._getChartConfig(records),
             chartData: this._getChartData(records)
         });
 
     },
-    _getChartConfig: function(){
+    _getChartConfig: function(records){
+        var field = "Field",
+            settings = this.getSettings(),
+            stackField = null;
+
+        if (records && records.length > 0){
+            field = records[0].getField(settings.bucketField).displayName;
+            if (settings.stackField && settings.stackField.length > 0){
+                stackField = records[0].getField(settings.stackField).displayName;
+            }
+        }
+
         return {
             chart: {
                 type: 'column'
             },
             title: {
-                text: 'Defects by Field'
+                text: 'Defects by ' + field
+
             },
             yAxis: {
                 title: {
@@ -52,7 +80,11 @@ Ext.define("defects-by-field-chart", {
                 }
             },
             legend: {
-                enabled: this.getSetting('stackField') && this.getSetting('stackField').length > 0
+                title: { text: stackField},
+                enabled: settings.stackField && settings.stackField.length > 0,
+                layout: 'vertical',
+                align: 'right',
+                verticalAlign: 'top'
             },
             plotOptions: {
                 column: {
@@ -123,6 +155,7 @@ Ext.define("defects-by-field-chart", {
 
         var filters = _.map(settings.allowedStates, function(state){ return {property: 'State', value: state}; });
         filters = Rally.data.wsapi.Filter.or(filters);
+        this.logger.log('_getStoreConfig', filters.toString(), fetch);
 
         return {
             model: settings.modelName,
@@ -131,12 +164,24 @@ Ext.define("defects-by-field-chart", {
             limit: 'Infinity'
         };
     },
+    _validateSettings: function(settings){
+        if (settings && settings.allowedStates && settings.allowedStates.length > 0){
+            return true; ;
+        }
+
+        this.add({
+            xtype: 'container',
+            html: 'Please use the app settings to configure at least one Allowed State for the data set.'
+        });
+    },
     _fetchData: function(config){
         var deferred = Ext.create('Deft.Deferred'),
             me = this;
 
+        this.setLoading(true);
         Ext.create('Rally.data.wsapi.Store',config).load({
             callback: function(records, operation){
+                me.setLoading(false);
                 me.logger.log('_fetchData', operation, records);
                 if (operation.wasSuccessful()){
                     deferred.resolve(records);
@@ -174,6 +219,6 @@ Ext.define("defects-by-field-chart", {
     onSettingsUpdate: function (settings){
         this.logger.log('onSettingsUpdate',settings);
         // Ext.apply(this, settings);
-        this.launch();
+        this._updateDisplay();
     }
 });

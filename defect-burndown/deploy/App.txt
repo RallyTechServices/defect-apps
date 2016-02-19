@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Defects by Field Value</title>
+    <title>Defect Burndown</title>
     <!--  (c) 2015 Rally Software Development Corp.  All Rights Reserved. -->
-    <!--  Build Date: Fri Feb 19 2016 12:33:53 GMT-0700 (MST) -->
+    <!--  Build Date: Fri Feb 19 2016 10:37:55 GMT-0700 (MST) -->
     
     <script type="text/javascript">
-        var APP_BUILD_DATE = "Fri Feb 19 2016 12:33:53 GMT-0700 (MST)";
-        var CHECKSUM = 4031383484;
+        var APP_BUILD_DATE = "Fri Feb 19 2016 10:37:55 GMT-0700 (MST)";
+        var CHECKSUM = 2609461713;
     </script>
     
     <script type="text/javascript" src="/apps/2.0/sdk.js"></script>
@@ -176,81 +176,53 @@ Ext.define('Rally.technicalservices.Logger',{
 
 });
 
-Ext.define('Rally.ui.combobox.FieldOptionsCombobox', {
-    requires: [],
-    extend: 'Rally.ui.combobox.FieldComboBox',
-    alias: 'widget.tsfieldoptionscombobox',
+Ext.define("DefectBurndownCalculator",{
+    extend: "Rally.data.lookback.calculator.TimeSeriesCalculator",
 
-    _isNotHidden: function(field) {
-        if (field && field.attributeDefinition ){
-            return field.attributeDefinition.Constrained && field.attributeDefinition.AttributeType != 'COLLECTION';
-        }
-        return false;
-    },
-    _populateStore: function() {
-        if (!this.store) {
-            return;
-        }
-        var data = _.sortBy(
-            _.map(
-                _.filter(this.model.getFields(), this._isNotHidden),
-                this._convertFieldToLabelValuePair,
-                this
-            ),
-            'name'
-        );
-
-        if (this.allowNoEntry){
-            data.unshift({name: this.noEntryText, value: null});
-        }
-        this.store.loadRawData(data);
-        this.setDefaultValue();
-        this.onReady();
+    getMetrics: function () {
+        return [
+            //{
+            //    "field": "PlanEstimate",
+            //    "as": "Planned",
+            //    "display": "line",
+            //    "f": "sum"
+            //},
+            {
+                "as": "Defects",
+                "f": "filteredCount",
+                "filterField": "Severity",
+                "filterValues": ["Critical", "Major Problem"],
+                "display": "column"
+            }
+        ];
     }
 });
+
 Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
     singleton: true,
 
     getFields: function(settings){
-        var labelWidth = 100,
-            width = 250;
+
         console.log('settings',settings);
         return [{
-            xtype: 'tsfieldoptionscombobox',
-            name: 'bucketField',
-            fieldLabel: 'Bucket by',
-            labelWidth: labelWidth,
-            labelAlign: 'right',
-            width: width,
-            model: settings.modelName,
-            allowNoEntry: false
-        },{
             xtype: 'rallyfieldvaluecombobox',
-            name: 'allowedStates',
+            name: 'includeStates',
             fieldLabel: 'Include States',
-            labelWidth: labelWidth,
-            width: width,
-            labelAlign: 'right',
             multiSelect: true,
             model: settings.modelName,
-            value: settings.allowedStates,
             field: 'State'
         },{
-            xtype: 'tsfieldoptionscombobox',
-            name: 'stackField',
-            fieldLabel: 'Stacks',
+            xtype: 'rallyfieldvaluecombobox',
+            name: 'includeSeverity',
+            fieldLabel: 'Include Severity',
+            multiSelect: true,
             model: settings.modelName,
-            labelWidth: labelWidth,
-            width: width,
-            labelAlign: 'right',
-            allowNoEntry: true,
-            noEntryText: '-- No Stacks --',
-            noEntryValue: null
+            field: 'Severity'
         }];
     }
 });
 
-Ext.define("defects-by-field-chart", {
+Ext.define("DefectBurndown", {
     extend: 'Rally.app.App',
     componentCls: 'app',
     logger: new Rally.technicalservices.Logger(),
@@ -258,182 +230,123 @@ Ext.define("defects-by-field-chart", {
 
     config: {
         defaultSettings: {
-            stackField: null,
-            bucketField: 'Project',
-            allowedStates: ['Open'],
+            includeStates: ['Open', 'Submitted'],
             modelName: 'Defect',
-            alwaysFetch: ['FormattedID','ObjectID','State'],
-            noEntryText: '(No Entry)'
+            includeSeverity: ['Critical','Major Problem'],
+            alwaysFetch: ['FormattedID','ObjectID','State','Severity']
         }
     },
 
     integrationHeaders : {
-        name : "defects-by-field-chart"
+        name : "DefectBurndown"
     },
-                        
+
     launch: function() {
-        this._updateDisplay();
+        this._buildChart();
     },
-    _updateDisplay: function(){
+    _buildChart: function(){
+        this.logger.log('_buildChart');
         this.removeAll();
 
-        if (!this._validateSettings(this.getSettings())){
-            return;
-        }
-
-        this._fetchData(this._getStoreConfig(this.getSettings())).then({
-            success: this._buildChart,
-            failure: this._showError,
-            scope: this
-        });
-    },
-    _buildChart: function(records){
-        this.logger.log('_buildChart', records);
-
-        if (!records || records.length === 0){
-            this.add({
-                xtype: 'container',
-                html: 'No records found for the configured settings.'
-            });
-            return;
-        }
 
         this.add({
             xtype: 'rallychart',
-            loadMask: false,
-            chartConfig: this._getChartConfig(records),
-            chartData: this._getChartData(records)
+            storeType: 'Rally.data.lookback.SnapshotStore',
+            storeConfig: this._getStoreConfig(this._getStoreConfig(this.getSettings(), Rally.util.DateTime.add(new Date(), 'day', -30), new Date())),
+            calculatorType: 'DefectBurndownCalculator',
+            //calculatorConfig: {
+            //    completedScheduleStateNames: ['Accepted', 'Released']
+            //},
+            chartConfig: this._getChartConfig()
         });
 
+        //this.add({
+        //    xtype: 'rallychart',
+        //    loadMask: false,
+        //    chartConfig: this._getChartConfig(),
+        //    chartData: this._getChartData(records)
+        //});
+
     },
-    _getChartConfig: function(records){
-        var field = "Field",
-            settings = this.getSettings(),
-            stackField = null;
-
-        if (records && records.length > 0){
-            field = records[0].getField(settings.bucketField).displayName;
-            if (settings.stackField && settings.stackField.length > 0){
-                stackField = records[0].getField(settings.stackField).displayName;
-            }
-        }
-
+    _getChartConfig: function(){
         return {
             chart: {
-                type: 'column'
+                defaultSeriesType: 'area',
+                zoomType: 'xy'
             },
             title: {
-                text: 'Defects by ' + field
-
+                text: 'Defect Burndown'
             },
-            yAxis: {
+            xAxis: {
+                categories: [],
+                tickmarkPlacement: 'on',
+                tickInterval: 5,
                 title: {
-                    text: 'Count'
+                    text: 'Date',
+                    margin: 10
                 }
             },
-            legend: {
-                title: { text: stackField},
-                enabled: settings.stackField && settings.stackField.length > 0,
-                layout: 'vertical',
-                align: 'right',
-                verticalAlign: 'top'
+            yAxis: [
+                {
+                    title: {
+                        text: 'Count'
+                    }
+                }
+            ],
+            tooltip: {
+                formatter: function() {
+                    return '' + this.x + '<br />' + this.series.name + ': ' + this.y;
+                }
             },
             plotOptions: {
+                series: {
+                    marker: {
+                        enabled: false,
+                        states: {
+                            hover: {
+                                enabled: true
+                            }
+                        }
+                    },
+                    groupPadding: 0.01
+                },
                 column: {
-                    stacking: 'normal'
+                    stacking: null,
+                    shadow: false
                 }
-
             }
-        };
-    },
-    _getChartData: function(records){
-        var hash = {},
-            settings=  this.getSettings(),
-            noEntryText = settings.noEntryText,
-            stacks = [];
-
-        Ext.Array.each(records, function(r){
-            var bucket = r.get(settings.bucketField) || noEntryText,
-                stack = "Total";
-
-            if (Ext.isObject(bucket)){
-                bucket = bucket._refObjectName;
-            }
-
-            if (settings.stackField){
-                stack = r.get(settings.stackField) || noEntryText;
-            }
-
-            if (Ext.isObject(stack)){
-                stack = stack._refObjectName;
-            }
-
-            if (!hash[bucket]){
-                hash[bucket] = {};
-            }
-            if (!hash[bucket][stack]){
-                if (!Ext.Array.contains(stacks, stack)){
-                    stacks.push(stack);
-                }
-                hash[bucket][stack] = 0;
-            }
-            hash[bucket][stack]++;
-        });
-
-        var series = [],
-            categories = _.keys(hash);
-
-        _.each(stacks, function(stack){
-            var obj = { name: stack, data: [] }
-            _.each(categories, function(bucket){
-                obj.data.push(hash[bucket][stack] || 0);
-            });
-            series.push(obj);
-        });
-
-        return {
-            series: series,
-            categories: categories
         };
     },
     _showError: function(msg){
         Rally.ui.notify.Notifier.showError(msg);
     },
-    _getStoreConfig: function(settings){
-        var fetch = settings.alwaysFetch.concat([settings.bucketField]);
-        if (settings.stackField){
-            fetch.push(settings.stackField);
-        }
+    _getStoreConfig: function(settings, startDate, endDate){
+        var fetch = settings.alwaysFetch;
 
-        var filters = _.map(settings.allowedStates, function(state){ return {property: 'State', value: state}; });
-        filters = Rally.data.wsapi.Filter.or(filters);
-        this.logger.log('_getStoreConfig', filters.toString(), fetch);
+        startDate = Rally.util.DateTime.toIsoString(startDate);
+        endDate = Rally.util.DateTime.toIsoString(endDate);
 
         return {
-            model: settings.modelName,
             fetch: fetch,
-            filters: filters,
-            limit: 'Infinity'
+            find: {
+                _ProjectHierarchy: this.getContext().getProject().ObjectID,
+                _TypeHierarchy: 'Defect',
+                State: {$in: settings.includeStates},
+                _ValidTo: {$gte: startDate},
+                _ValidFrom: {$lte: endDate}
+            },
+            hydrate: ["State"],
+            limit: "Infinity",
+            removeUnauthorizedSnapshots: true
         };
-    },
-    _validateSettings: function(settings){
-        if (settings && settings.allowedStates && settings.allowedStates.length > 0){
-            return true; ;
-        }
 
-        this.add({
-            xtype: 'container',
-            html: 'Please use the app settings to configure at least one Allowed State for the data set.'
-        });
     },
     _fetchData: function(config){
         var deferred = Ext.create('Deft.Deferred'),
             me = this;
 
-        this.setLoading(true);
-        Ext.create('Rally.data.wsapi.Store',config).load({
+        Ext.create('Rally.data.lookback.SnapshotStore', config).load({
             callback: function(records, operation){
-                me.setLoading(false);
                 me.logger.log('_fetchData', operation, records);
                 if (operation.wasSuccessful()){
                     deferred.resolve(records);
@@ -457,27 +370,27 @@ Ext.define("defects-by-field-chart", {
             }
         ];
     },
-    
+
     _launchInfo: function() {
         if ( this.about_dialog ) { this.about_dialog.destroy(); }
         this.about_dialog = Ext.create('Rally.technicalservices.InfoLink',{});
     },
-    
+
     isExternal: function(){
         return typeof(this.getAppId()) == 'undefined';
     },
-    
+
     //onSettingsUpdate:  Override
     onSettingsUpdate: function (settings){
         this.logger.log('onSettingsUpdate',settings);
         // Ext.apply(this, settings);
-        this._updateDisplay();
+        this.launch();
     }
 });
 
             
-               Rally.launchApp('defects-by-field-chart', {
-                   name: 'Defects by Field Value'
+               Rally.launchApp('DefectBurndown', {
+                   name: 'Defect Burndown'
                });
         });
     </script>
