@@ -27,13 +27,18 @@ Ext.define("DefectBurndown", {
             endDate = new Date(),
             storeConfig = this._getStoreConfig(settings, startDate, endDate);
 
+        var includeSeverity = settings.includeSeverity;
+        if (Ext.isString(includeSeverity)){
+            includeSeverity = includeSeverity.split(',');
+        }
+
         this.add({
             xtype: 'rallychart',
             storeType: 'Rally.data.lookback.SnapshotStore',
             storeConfig: storeConfig,
             calculatorType: 'DefectBurndownCalculator',
             calculatorConfig: {
-                includeSeverity: settings.includeSeverity,
+                includeSeverity: includeSeverity,
                 startDate: Rally.util.DateTime.toIsoString(startDate, true),
                 endDate: Rally.util.DateTime.toIsoString(endDate, true)
             },
@@ -105,13 +110,17 @@ Ext.define("DefectBurndown", {
 
         startDate = Rally.util.DateTime.toIsoString(startDate);
         endDate = Rally.util.DateTime.toIsoString(endDate);
+        var includeStates = settings.includeStates;
+        if (Ext.isString(includeStates)){
+            includeStates = includeStates.split(',');
+        }
 
         return {
             fetch: fetch,
             find: {
                 _ProjectHierarchy: this.getContext().getProject().ObjectID,
                 _TypeHierarchy: 'Defect',
-                State: {$in: settings.includeStates},
+                State: {$in: includeStates},
                 _ValidTo: {$gte: startDate},
                 _ValidFrom: {$lte: endDate}
             },

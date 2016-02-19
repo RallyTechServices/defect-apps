@@ -3,11 +3,11 @@
 <head>
     <title>Defects by Field Value</title>
     <!--  (c) 2015 Rally Software Development Corp.  All Rights Reserved. -->
-    <!--  Build Date: Fri Feb 19 2016 12:33:53 GMT-0700 (MST) -->
+    <!--  Build Date: Fri Feb 19 2016 15:14:01 GMT-0700 (MST) -->
     
     <script type="text/javascript">
-        var APP_BUILD_DATE = "Fri Feb 19 2016 12:33:53 GMT-0700 (MST)";
-        var CHECKSUM = 4031383484;
+        var APP_BUILD_DATE = "Fri Feb 19 2016 15:14:01 GMT-0700 (MST)";
+        var CHECKSUM = 4158012680;
     </script>
     
     <script type="text/javascript" src="/apps/2.0/sdk.js"></script>
@@ -227,7 +227,7 @@ Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
         },{
             xtype: 'rallyfieldvaluecombobox',
             name: 'allowedStates',
-            fieldLabel: 'Include States',
+            fieldLabel: 'Include Defect States',
             labelWidth: labelWidth,
             width: width,
             labelAlign: 'right',
@@ -305,6 +305,13 @@ Ext.define("defects-by-field-chart", {
             chartData: this._getChartData(records)
         });
 
+    },
+    _getAllowedStates: function(){
+        var settings = this.getSettings();
+        if (Ext.isString(settings.allowedStates)){
+            return settings.allowedStates.split(',');
+        }
+        return settings.allowedStates;
     },
     _getChartConfig: function(records){
         var field = "Field",
@@ -405,7 +412,7 @@ Ext.define("defects-by-field-chart", {
             fetch.push(settings.stackField);
         }
 
-        var filters = _.map(settings.allowedStates, function(state){ return {property: 'State', value: state}; });
+        var filters = _.map(this._getAllowedStates(), function(state){ return {property: 'State', value: state}; });
         filters = Rally.data.wsapi.Filter.or(filters);
         this.logger.log('_getStoreConfig', filters.toString(), fetch);
 
@@ -417,8 +424,8 @@ Ext.define("defects-by-field-chart", {
         };
     },
     _validateSettings: function(settings){
-        if (settings && settings.allowedStates && settings.allowedStates.length > 0){
-            return true; ;
+        if (this._getAllowedStates().length > 0){
+            return true;
         }
 
         this.add({

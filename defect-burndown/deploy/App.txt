@@ -3,11 +3,11 @@
 <head>
     <title>Defect Burndown</title>
     <!--  (c) 2015 Rally Software Development Corp.  All Rights Reserved. -->
-    <!--  Build Date: Fri Feb 19 2016 10:37:55 GMT-0700 (MST) -->
+    <!--  Build Date: Fri Feb 19 2016 13:51:03 GMT-0700 (MST) -->
     
     <script type="text/javascript">
-        var APP_BUILD_DATE = "Fri Feb 19 2016 10:37:55 GMT-0700 (MST)";
-        var CHECKSUM = 2609461713;
+        var APP_BUILD_DATE = "Fri Feb 19 2016 13:51:03 GMT-0700 (MST)";
+        var CHECKSUM = 2902358670;
     </script>
     
     <script type="text/javascript" src="/apps/2.0/sdk.js"></script>
@@ -182,16 +182,17 @@ Ext.define("DefectBurndownCalculator",{
     getMetrics: function () {
         return [
             //{
-            //    "field": "PlanEstimate",
-            //    "as": "Planned",
+            //    "field": "ObjectID",
+            //    "as": "Count",
             //    "display": "line",
-            //    "f": "sum"
+            //    "f": "count"
             //},
             {
+                "field": "FormattedID",
                 "as": "Defects",
                 "f": "filteredCount",
                 "filterField": "Severity",
-                "filterValues": ["Critical", "Major Problem"],
+                "filterValues": this.includeSeverity,
                 "display": "column"
             }
         ];
@@ -233,7 +234,7 @@ Ext.define("DefectBurndown", {
             includeStates: ['Open', 'Submitted'],
             modelName: 'Defect',
             includeSeverity: ['Critical','Major Problem'],
-            alwaysFetch: ['FormattedID','ObjectID','State','Severity']
+            alwaysFetch: ['FormattedID','ObjectID','State','Severity','_ValidFrom','_ValidTo']
         }
     },
 
@@ -242,21 +243,30 @@ Ext.define("DefectBurndown", {
     },
 
     launch: function() {
-        this._buildChart();
+        this._buildChart(this.getSettings());
     },
-    _buildChart: function(){
+    _buildChart: function(settings){
         this.logger.log('_buildChart');
         this.removeAll();
+        var startDate = Rally.util.DateTime.add(new Date(), 'day', -100),
+            endDate = new Date(),
+            storeConfig = this._getStoreConfig(settings, startDate, endDate);
 
+        var includeSeverity = settings.includeSeverity;
+        if (Ext.isString(includeSeverity)){
+            includeSeverity = includeSeverity.split(',');
+        }
 
         this.add({
             xtype: 'rallychart',
             storeType: 'Rally.data.lookback.SnapshotStore',
-            storeConfig: this._getStoreConfig(this._getStoreConfig(this.getSettings(), Rally.util.DateTime.add(new Date(), 'day', -30), new Date())),
+            storeConfig: storeConfig,
             calculatorType: 'DefectBurndownCalculator',
-            //calculatorConfig: {
-            //    completedScheduleStateNames: ['Accepted', 'Released']
-            //},
+            calculatorConfig: {
+                includeSeverity: includeSeverity,
+                startDate: Rally.util.DateTime.toIsoString(startDate, true),
+                endDate: Rally.util.DateTime.toIsoString(endDate, true)
+            },
             chartConfig: this._getChartConfig()
         });
 
@@ -275,7 +285,7 @@ Ext.define("DefectBurndown", {
                 zoomType: 'xy'
             },
             title: {
-                text: 'Defect Burndown'
+                text: null
             },
             xAxis: {
                 categories: [],
@@ -325,17 +335,21 @@ Ext.define("DefectBurndown", {
 
         startDate = Rally.util.DateTime.toIsoString(startDate);
         endDate = Rally.util.DateTime.toIsoString(endDate);
+        var includeStates = settings.includeStates;
+        if (Ext.isString(includeStates)){
+            includeStates = includeStates.split(',');
+        }
 
         return {
             fetch: fetch,
             find: {
                 _ProjectHierarchy: this.getContext().getProject().ObjectID,
                 _TypeHierarchy: 'Defect',
-                State: {$in: settings.includeStates},
+                State: {$in: includeStates},
                 _ValidTo: {$gte: startDate},
                 _ValidFrom: {$lte: endDate}
             },
-            hydrate: ["State"],
+            hydrate: ["State","Severity"],
             limit: "Infinity",
             removeUnauthorizedSnapshots: true
         };
@@ -384,7 +398,8 @@ Ext.define("DefectBurndown", {
     onSettingsUpdate: function (settings){
         this.logger.log('onSettingsUpdate',settings);
         // Ext.apply(this, settings);
-        this.launch();
+        this._buildChart(settings);
+
     }
 });
 

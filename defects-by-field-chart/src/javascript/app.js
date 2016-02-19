@@ -54,6 +54,13 @@ Ext.define("defects-by-field-chart", {
         });
 
     },
+    _getAllowedStates: function(){
+        var settings = this.getSettings();
+        if (Ext.isString(settings.allowedStates)){
+            return settings.allowedStates.split(',');
+        }
+        return settings.allowedStates;
+    },
     _getChartConfig: function(records){
         var field = "Field",
             settings = this.getSettings(),
@@ -153,7 +160,7 @@ Ext.define("defects-by-field-chart", {
             fetch.push(settings.stackField);
         }
 
-        var filters = _.map(settings.allowedStates, function(state){ return {property: 'State', value: state}; });
+        var filters = _.map(this._getAllowedStates(), function(state){ return {property: 'State', value: state}; });
         filters = Rally.data.wsapi.Filter.or(filters);
         this.logger.log('_getStoreConfig', filters.toString(), fetch);
 
@@ -165,8 +172,8 @@ Ext.define("defects-by-field-chart", {
         };
     },
     _validateSettings: function(settings){
-        if (settings && settings.allowedStates && settings.allowedStates.length > 0){
-            return true; ;
+        if (this._getAllowedStates().length > 0){
+            return true;
         }
 
         this.add({

@@ -17,7 +17,7 @@ Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
         },{
             xtype: 'rallyfieldvaluecombobox',
             name: 'allowedStates',
-            fieldLabel: 'Include States',
+            fieldLabel: 'Include Defect States',
             labelWidth: labelWidth,
             width: width,
             labelAlign: 'right',
