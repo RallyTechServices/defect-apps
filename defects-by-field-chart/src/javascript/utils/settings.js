@@ -4,7 +4,7 @@ Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
     getFields: function(settings, states){
         var labelWidth = 150,
             width = 300;
-        
+
 
         var stateOptions = _.map(states, function(s){
             console.log('state', s,Ext.Array.contains(settings.allowedStates, s));
