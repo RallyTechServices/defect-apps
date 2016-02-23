@@ -11,7 +11,9 @@ Ext.define("defects-by-field-chart", {
             allowedStates: ['Open'],
             modelName: 'Defect',
             alwaysFetch: ['FormattedID','ObjectID','State'],
-            noEntryText: '(No Entry)'
+            noEntryText: '(No Entry)',
+            query: '',
+            showNoDataCategories: false
         }
     },
 
@@ -20,7 +22,17 @@ Ext.define("defects-by-field-chart", {
     },
                         
     launch: function() {
-        this._updateDisplay();
+        this._fetchAllowedValues('Defect', 'State').then({
+            success: function(values){
+                this.states = values;
+                this._updateDisplay();
+            },
+            failure: function(msg){
+                Rally.ui.notify.Notifier.showError({ message: msg });
+            },
+            scope: this
+        });
+        //this._updateDisplay();
     },
     _updateDisplay: function(){
         this.removeAll();
@@ -28,16 +40,47 @@ Ext.define("defects-by-field-chart", {
         if (!this._validateSettings(this.getSettings())){
             return;
         }
-
-        this._fetchData(this._getStoreConfig(this.getSettings())).then({
-            success: this._buildChart,
-            failure: this._showError,
+        this._fetchAllowedValues(this.getSettings().modelName, this.getSettings().bucketField).then({
+            success: function(values){
+                this.allCategories = values;
+                this._fetchData(this._getStoreConfig(this.getSettings())).then({
+                    success: this._buildChart,
+                    failure: this._showError,
+                    scope: this
+                });
+            },
+            failure: function(msg){
+                Rally.ui.notify.Notifier.showError({message: msg});
+            },
             scope: this
         });
     },
+    _fetchAllowedValues: function(modelName, fieldName){
+        var deferred = Ext.create('Deft.Deferred');
+        Rally.data.ModelFactory.getModel({
+            type: modelName,
+            success: function(model) {
+                model.getField(fieldName).getAllowedValueStore().load({
+                    callback: function(records, operation, success) {
+                        this.logger.log('_fetchAllowedValues', records, operation);
+                        if (success){
+                            var vals = _.map(records, function(r){ return r.get('StringValue'); });
+                            deferred.resolve(vals);
+                        } else {
+                            deferred.reject("Error fetching category data");
+                        }
+                    },
+                    scope: this
+                });
+            },
+            scope: this
+        });
+        return deferred;
+    },
+
     _buildChart: function(records){
         this.logger.log('_buildChart', records);
-
+        var settings = this.getSettings();
         if (!records || records.length === 0){
             this.add({
                 xtype: 'container',
@@ -135,13 +178,19 @@ Ext.define("defects-by-field-chart", {
             hash[bucket][stack]++;
         });
 
+
         var series = [],
             categories = _.keys(hash);
+
+        if (settings.showNoDataCategories === 'true' || settings.showNoDataCategories === true){
+            categories = this.allCategories || categories;
+        }
 
         _.each(stacks, function(stack){
             var obj = { name: stack, data: [] }
             _.each(categories, function(bucket){
-                obj.data.push(hash[bucket][stack] || 0);
+                var val = hash[bucket] && hash[bucket][stack] || 0;
+                obj.data.push(val);
             });
             series.push(obj);
         });
@@ -162,6 +211,13 @@ Ext.define("defects-by-field-chart", {
 
         var filters = _.map(this._getAllowedStates(), function(state){ return {property: 'State', value: state}; });
         filters = Rally.data.wsapi.Filter.or(filters);
+
+        if (settings.query && settings.query.length > 0){
+            var queryFilter = Rally.data.wsapi.Filter.fromQueryString(settings.query);
+            this.logger.log('_getStoreConfig -> query filter:', queryFilter.toString(), 'allowed state filter:', filters.toString());
+            filters = filters.and(queryFilter);
+        }
+
         this.logger.log('_getStoreConfig', filters.toString(), fetch);
 
         return {
@@ -172,14 +228,15 @@ Ext.define("defects-by-field-chart", {
         };
     },
     _validateSettings: function(settings){
+
         if (this._getAllowedStates().length > 0){
             return true;
         }
-
         this.add({
             xtype: 'container',
             html: 'Please use the app settings to configure at least one Allowed State for the data set.'
         });
+
     },
     _fetchData: function(config){
         var deferred = Ext.create('Deft.Deferred'),
@@ -201,7 +258,7 @@ Ext.define("defects-by-field-chart", {
         return deferred;
     },
     getSettingsFields: function(){
-        return Rally.technicalservices.DefectsByFieldSettings.getFields(this.getSettings());
+        return Rally.technicalservices.DefectsByFieldSettings.getFields(this.getSettings(), this.states);
     },
     getOptions: function() {
         return [

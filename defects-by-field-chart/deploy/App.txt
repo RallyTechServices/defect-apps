@@ -3,11 +3,11 @@
 <head>
     <title>Defects by Field Value</title>
     <!--  (c) 2015 Rally Software Development Corp.  All Rights Reserved. -->
-    <!--  Build Date: Fri Feb 19 2016 15:14:01 GMT-0700 (MST) -->
+    <!--  Build Date: Tue Feb 23 2016 15:44:27 GMT-0700 (MST) -->
     
     <script type="text/javascript">
-        var APP_BUILD_DATE = "Fri Feb 19 2016 15:14:01 GMT-0700 (MST)";
-        var CHECKSUM = 4158012680;
+        var APP_BUILD_DATE = "Tue Feb 23 2016 15:44:27 GMT-0700 (MST)";
+        var CHECKSUM = 8435074526;
     </script>
     
     <script type="text/javascript" src="/apps/2.0/sdk.js"></script>
@@ -206,15 +206,98 @@ Ext.define('Rally.ui.combobox.FieldOptionsCombobox', {
         this.store.loadRawData(data);
         this.setDefaultValue();
         this.onReady();
-    }
+    },
+    setValue: function(value, doSelect) {
+        var me = this,
+            valueNotFoundText = me.valueNotFoundText,
+            inputEl = me.inputEl,
+            i, len, record,
+            dataObj,
+            matchedRecords = [],
+            displayTplData = [],
+            processedValue = [];
+
+        if (me.store.loading) {
+            // Called while the Store is loading. Ensure it is processed by the onLoad method.
+            me.value = value;
+            me.setHiddenValue(me.value);
+            return me;
+        }
+
+        // This method processes multi-values, so ensure value is an array.
+        value = Ext.Array.from(value);
+
+        // Loop through values, matching each from the Store, and collecting matched records
+        for (i = 0, len = value.length; i < len; i++) {
+            record = value[i];
+            if (!record || !record.isModel) {
+                record = me.findRecordByValue(record);
+            }
+            // record found, select it.
+            if (record) {
+                matchedRecords.push(record);
+                displayTplData.push(record.data);
+                processedValue.push(record.get(me.valueField));
+            }
+            // record was not found, this could happen because
+            // store is not loaded or they set a value not in the store
+            else {
+                // If we are allowing insertion of values not represented in the Store, then push the value and
+                // create a fake record data object to push as a display value for use by the displayTpl
+                if (!me.forceSelection) {
+                    processedValue.push(value[i]);
+                    dataObj = {};
+                    dataObj[me.displayField] = value[i];
+                    displayTplData.push(dataObj);
+                    // TODO: Add config to create new records on selection of a value that has no match in the Store
+                }
+                // Else, if valueNotFoundText is defined, display it, otherwise display nothing for this value
+                else if (Ext.isDefined(valueNotFoundText)) {
+                    displayTplData.push(valueNotFoundText);
+                }
+            }
+        }
+
+        // Set the value of this field. If we are multiselecting, then that is an array.
+        me.setHiddenValue(processedValue);
+        me.value = me.multiSelect ? processedValue : processedValue[0];
+        if (!Ext.isDefined(me.value)) {
+            me.value = null;
+        }
+        me.displayTplData = displayTplData; //store for getDisplayValue method
+        me.lastSelection = me.valueModels = matchedRecords;
+
+        if (inputEl && me.emptyText && !Ext.isEmpty(value)) {
+            inputEl.removeCls(me.emptyCls);
+        }
+
+        // Calculate raw value from the collection of Model data
+        me.setRawValue(me.getDisplayValue());
+        me.checkChange();
+
+        if (doSelect !== false) {
+            me.syncSelection();
+        }
+        me.applyEmptyText();
+
+        return me;
+    },
 });
 Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
     singleton: true,
 
-    getFields: function(settings){
-        var labelWidth = 100,
-            width = 250;
-        console.log('settings',settings);
+    getFields: function(settings, states){
+        var labelWidth = 150,
+            width = 300;
+
+
+        var stateOptions = _.map(states, function(s){
+            console.log('state', s,Ext.Array.contains(settings.allowedStates, s));
+            var checked = Ext.Array.contains(settings.allowedStates, s);
+            return { boxLabel: s, name: 'allowedStates', inputValue: s, checked: checked };
+        });
+
+
         return [{
             xtype: 'tsfieldoptionscombobox',
             name: 'bucketField',
@@ -225,17 +308,15 @@ Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
             model: settings.modelName,
             allowNoEntry: false
         },{
-            xtype: 'rallyfieldvaluecombobox',
-            name: 'allowedStates',
-            fieldLabel: 'Include Defect States',
+            xtype: 'checkboxgroup',
+            fieldLabel: 'Include States',
             labelWidth: labelWidth,
             width: width,
             labelAlign: 'right',
-            multiSelect: true,
-            model: settings.modelName,
-            value: settings.allowedStates,
-            field: 'State'
-        },{
+            columns: 1,
+            vertical: true,
+            items: stateOptions
+        }, {
             xtype: 'tsfieldoptionscombobox',
             name: 'stackField',
             fieldLabel: 'Stacks',
@@ -246,6 +327,41 @@ Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
             allowNoEntry: true,
             noEntryText: '-- No Stacks --',
             noEntryValue: null
+        },{
+            xtype: 'rallycheckboxfield',
+            fieldLabel: 'Include empty categories',
+            labelWidth: labelWidth,
+            width: width,
+            labelAlign: 'right',
+            name: 'showNoDataCategories'
+        },{
+            xtype: 'textarea',
+            fieldLabel: 'Query',
+            name: 'query',
+            anchor: '100%',
+            cls: 'query-field',
+            labelAlign: 'right',
+            labelWidth: labelWidth,
+            margin: '0 70 0 0',
+            plugins: [
+                {
+                    ptype: 'rallyhelpfield',
+                    helpId: 194
+                },
+                'rallyfieldvalidationui'
+            ],
+            validateOnBlur: false,
+            validateOnChange: false,
+            validator: function(value) {
+                try {
+                    if (value) {
+                        Rally.data.wsapi.Filter.fromQueryString(value);
+                    }
+                    return true;
+                } catch (e) {
+                    return e.message;
+                }
+            }
         }];
     }
 });
@@ -263,7 +379,9 @@ Ext.define("defects-by-field-chart", {
             allowedStates: ['Open'],
             modelName: 'Defect',
             alwaysFetch: ['FormattedID','ObjectID','State'],
-            noEntryText: '(No Entry)'
+            noEntryText: '(No Entry)',
+            query: '',
+            showNoDataCategories: false
         }
     },
 
@@ -272,7 +390,17 @@ Ext.define("defects-by-field-chart", {
     },
                         
     launch: function() {
-        this._updateDisplay();
+        this._fetchAllowedValues('Defect', 'State').then({
+            success: function(values){
+                this.states = values;
+                this._updateDisplay();
+            },
+            failure: function(msg){
+                Rally.ui.notify.Notifier.showError({ message: msg });
+            },
+            scope: this
+        });
+        //this._updateDisplay();
     },
     _updateDisplay: function(){
         this.removeAll();
@@ -280,16 +408,47 @@ Ext.define("defects-by-field-chart", {
         if (!this._validateSettings(this.getSettings())){
             return;
         }
-
-        this._fetchData(this._getStoreConfig(this.getSettings())).then({
-            success: this._buildChart,
-            failure: this._showError,
+        this._fetchAllowedValues(this.getSettings().modelName, this.getSettings().bucketField).then({
+            success: function(values){
+                this.allCategories = values;
+                this._fetchData(this._getStoreConfig(this.getSettings())).then({
+                    success: this._buildChart,
+                    failure: this._showError,
+                    scope: this
+                });
+            },
+            failure: function(msg){
+                Rally.ui.notify.Notifier.showError({message: msg});
+            },
             scope: this
         });
     },
+    _fetchAllowedValues: function(modelName, fieldName){
+        var deferred = Ext.create('Deft.Deferred');
+        Rally.data.ModelFactory.getModel({
+            type: modelName,
+            success: function(model) {
+                model.getField(fieldName).getAllowedValueStore().load({
+                    callback: function(records, operation, success) {
+                        this.logger.log('_fetchAllowedValues', records, operation);
+                        if (success){
+                            var vals = _.map(records, function(r){ return r.get('StringValue'); });
+                            deferred.resolve(vals);
+                        } else {
+                            deferred.reject("Error fetching category data");
+                        }
+                    },
+                    scope: this
+                });
+            },
+            scope: this
+        });
+        return deferred;
+    },
+
     _buildChart: function(records){
         this.logger.log('_buildChart', records);
-
+        var settings = this.getSettings();
         if (!records || records.length === 0){
             this.add({
                 xtype: 'container',
@@ -387,13 +546,19 @@ Ext.define("defects-by-field-chart", {
             hash[bucket][stack]++;
         });
 
+
         var series = [],
             categories = _.keys(hash);
+
+        if (settings.showNoDataCategories === 'true' || settings.showNoDataCategories === true){
+            categories = this.allCategories || categories;
+        }
 
         _.each(stacks, function(stack){
             var obj = { name: stack, data: [] }
             _.each(categories, function(bucket){
-                obj.data.push(hash[bucket][stack] || 0);
+                var val = hash[bucket] && hash[bucket][stack] || 0;
+                obj.data.push(val);
             });
             series.push(obj);
         });
@@ -414,6 +579,13 @@ Ext.define("defects-by-field-chart", {
 
         var filters = _.map(this._getAllowedStates(), function(state){ return {property: 'State', value: state}; });
         filters = Rally.data.wsapi.Filter.or(filters);
+
+        if (settings.query && settings.query.length > 0){
+            var queryFilter = Rally.data.wsapi.Filter.fromQueryString(settings.query);
+            this.logger.log('_getStoreConfig -> query filter:', queryFilter.toString(), 'allowed state filter:', filters.toString());
+            filters = filters.and(queryFilter);
+        }
+
         this.logger.log('_getStoreConfig', filters.toString(), fetch);
 
         return {
@@ -424,14 +596,15 @@ Ext.define("defects-by-field-chart", {
         };
     },
     _validateSettings: function(settings){
+
         if (this._getAllowedStates().length > 0){
             return true;
         }
-
         this.add({
             xtype: 'container',
             html: 'Please use the app settings to configure at least one Allowed State for the data set.'
         });
+
     },
     _fetchData: function(config){
         var deferred = Ext.create('Deft.Deferred'),
@@ -453,7 +626,7 @@ Ext.define("defects-by-field-chart", {
         return deferred;
     },
     getSettingsFields: function(){
-        return Rally.technicalservices.DefectsByFieldSettings.getFields(this.getSettings());
+        return Rally.technicalservices.DefectsByFieldSettings.getFields(this.getSettings(), this.states);
     },
     getOptions: function() {
         return [

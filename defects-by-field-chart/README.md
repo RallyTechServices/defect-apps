@@ -1,5 +1,22 @@
 #Defects by Field Value
 
+Column chart that shows defect count aggregated by a selected field on the Defect for the selected context scope.
+  
+![ScreenShot](/images/defects-by-field-chart.png)
+  
+Configuration Options
+  
+  The following options can be configured: 
+  *  Bucket by - This is the x-axis field that the defect count is aggregated by.  
+  *  Include States - Only Defects with selected states will included in the defect data set.  At least one state must be selected.  
+  *  Stacks [optional] - Series.  Allows stacking of series by the selected field.  
+  *  Include empty categories - If checked, then all allowed values of the bucket field will be displayed on the chart, even if there are no defects in those categories.  
+     If unchecked, only categories that have a defect count > 0 will be displayed on the x-axis.
+  *  Query - query to filter the defect data set.  *** Note that if this query contains State, it will override the values selected in Include States configuration.     
+
+![ScreenShot](/images/defects-by-field-settings.png)
+
+
 ## Development Notes
 
 ### First Load
