@@ -9,7 +9,14 @@ Ext.define("DefectBurndown", {
             includeStates: ['Open', 'Submitted'],
             modelName: 'Defect',
             includeSeverity: ['Critical','Major Problem'],
-            alwaysFetch: ['FormattedID','ObjectID','State','Severity','_ValidFrom','_ValidTo']
+            alwaysFetch: ['FormattedID','ObjectID','State','Severity','CreationDate',"_PreviousValues.State",'_ValidFrom','_ValidTo','_SnapshotNumber'],
+            excludeUserStoryDefects: true,
+            granularity: 'day',
+            dateType: 'release',
+            offsetStartDate: -60,
+            offsetEndDate: 0,
+            customStartDate: Rally.util.DateTime.add(new Date(), 'day', -60),
+            customEndDate: Rally.util.DateTime.add(new Date())
         }
     },
 
@@ -17,19 +24,111 @@ Ext.define("DefectBurndown", {
         name : "DefectBurndown"
     },
 
-    launch: function() {
-        this._buildChart(this.getSettings());
-    },
-    _buildChart: function(settings){
-        this.logger.log('_buildChart');
-        this.removeAll();
-        var startDate = Rally.util.DateTime.add(new Date(), 'day', -100),
-            endDate = new Date(),
-            storeConfig = this._getStoreConfig(settings, startDate, endDate);
+    severityAllowedValues: undefined,
+    stateAllowedValues: undefined,
 
-        var includeSeverity = settings.includeSeverity;
-        if (Ext.isString(includeSeverity)){
-            includeSeverity = includeSeverity.split(',');
+    launch: function() {
+        this._initializeApp();
+    },
+
+    _initializeApp: function(){
+
+        Rally.data.ModelFactory.getModel({
+            type: 'Defect',
+            success: function (model) {
+                this.model = model;
+                Deft.Promise.all([
+                    this._fetchAllowedValues(model, 'State'),
+                    this._fetchAllowedValues(model, 'Severity')]).then({
+
+                    success: function (results) {
+                        this.logger.log('launch', results);
+                        this.stateAllowedValues = results[0];
+                        this.severityAllowedValues = results[1];
+
+                        if (this._validateSettings(this.getSettings())){
+                            this._addSeverityOptions();
+                        }
+                    },
+                    failure: function (msg) {
+                        Rally.ui.notify.Notifier.showError({message: msg});
+                    },
+                    scope: this
+                });
+            },
+            scope: this
+        });
+    },
+    _validateSettings: function(settings){
+        this.logger.log('_validateSettings', settings);
+        var msg = 'Please configure included defect states in the App Settings.';
+        if (settings && settings.includeStates && settings.includeStates.length > 0){
+            var startDate = this._getStartDate(),
+                endDate = this._getEndDate();
+
+            if (startDate && endDate){
+                if (Date.parse(startDate) < Date.parse(endDate)){
+                    return true;
+                }
+                msg = "Please select a Start Date that falls before the selected End Date."
+
+            } else {
+
+                if (settings.dateType === "release"){
+                    msg = "A release date range has been selected in the App Settings.  Please confirm app is being run on a release scoped dashboard page."
+                } else {
+                    msg = "Please select a valid custom date range in the App Settings."
+                }
+            }
+        }
+        this.removeAll();
+        this.add({
+            xtype: 'container',
+            html: msg
+        });
+        return false;
+    },
+    _addSeverityOptions: function(){
+        this.removeAll();
+
+        var labelWidth = 100,
+            severityOptions = _.map(this.severityAllowedValues, function(s){
+               return { boxLabel: s || "None",  inputValue: s, checked: true };
+            }),
+            columns = Math.min(8, severityOptions.length),
+            width = columns * 12 + '%';
+
+        var cg = this.add({
+            xtype: 'checkboxgroup',
+            fieldLabel: 'Include Severity',
+            labelAlign: 'right',
+            itemId: 'includeSeverity',
+            labelWidth: labelWidth,
+            columns: columns,
+            width: width,
+            margin: '10 10 25 10',
+            vertical: true,
+            items: severityOptions
+        });
+        cg.on('change', this._buildChart, this);
+        this._buildChart();
+    },
+    _buildChart: function(cg){
+        var settings = this.getSettings();
+        this.logger.log('_buildChart',  settings.includeStates);
+
+        if (this.down('rallychart')){
+            this.down('rallychart').destroy();
+        }
+
+        var query = settings.query,
+            startDate = this._getStartDate(),
+            endDate = this._getEndDate(),
+            storeConfig = this._getStoreConfig(settings, startDate, endDate, query);
+
+        var includeSeverity = this.severityAllowedValues;
+        if (cg && cg.getValue){
+            includeSeverity = _.values(cg.getValue());
         }
 
         this.add({
@@ -39,19 +138,63 @@ Ext.define("DefectBurndown", {
             calculatorType: 'DefectBurndownCalculator',
             calculatorConfig: {
                 includeSeverity: includeSeverity,
+                includeStates: settings.includeStates,
                 startDate: Rally.util.DateTime.toIsoString(startDate, true),
-                endDate: Rally.util.DateTime.toIsoString(endDate, true)
+                endDate: Rally.util.DateTime.toIsoString(endDate, true),
+                granularity: settings.granularity
             },
             chartConfig: this._getChartConfig()
         });
+    },
+    _getStartDate: function(){
+        var settings = this.getSettings(),
+            startDate = null;
 
-        //this.add({
-        //    xtype: 'rallychart',
-        //    loadMask: false,
-        //    chartConfig: this._getChartConfig(),
-        //    chartData: this._getChartData(records)
-        //});
+        switch (settings.dateType){
+            case "release":
+                startDate = this.getContext().getTimeboxScope() &&
+                    this.getContext().getTimeboxScope().type === 'release' &&
+                    this.getContext().getTimeboxScope().getRecord() &&
+                        Rally.util.DateTime.fromIsoString(this.getContext().getTimeboxScope().getRecord().get('ReleaseStartDate')) || null;
+                break;
 
+            case "offset":
+                startDate = Rally.util.DateTime.add(new Date(), 'day', settings.offsetStartDate);
+                break;
+
+            case "custom":
+                startDate = settings.customStartDate;
+                break;
+        }
+        if (startDate){
+            return new Date(startDate);
+        }
+        return null;
+    },
+    _getEndDate: function(){
+        var settings = this.getSettings(),
+            endDate = null;
+
+        switch (settings.dateType){
+            case "release":
+                endDate = this.getContext().getTimeboxScope() &&
+                    this.getContext().getTimeboxScope().type === 'release' &&
+                    this.getContext().getTimeboxScope().getRecord() &&
+                    Rally.util.DateTime.fromIsoString(this.getContext().getTimeboxScope().getRecord().get('ReleaseDate')) || null;
+                break;
+
+            case "offset":
+                endDate = Rally.util.DateTime.add(new Date(), 'day', settings.offsetEndDate);
+                break;
+
+            case "custom":
+                endDate = settings.customEndDate;
+                break;
+        }
+        if (endDate){
+            return new Date(endDate);
+        }
+        return null;
     },
     _getChartConfig: function(){
         return {
@@ -105,7 +248,7 @@ Ext.define("DefectBurndown", {
     _showError: function(msg){
         Rally.ui.notify.Notifier.showError(msg);
     },
-    _getStoreConfig: function(settings, startDate, endDate){
+    _getStoreConfig: function(settings, startDate, endDate, query){
         var fetch = settings.alwaysFetch;
 
         startDate = Rally.util.DateTime.toIsoString(startDate);
@@ -115,19 +258,27 @@ Ext.define("DefectBurndown", {
             includeStates = includeStates.split(',');
         }
 
+        var find = {
+            _ProjectHierarchy: this.getContext().getProject().ObjectID,
+            _TypeHierarchy: 'Defect',
+            "$or": [{State: {$in: includeStates}}, {"_PreviousValues.State": {$in: includeStates}}],
+            _ValidTo: {$gte: startDate},
+            _ValidFrom: {$lte: endDate}
+        };
+        if (settings.excludeUserStoryDefects === false || settings.excludeUserStoryDefects === 'false'){
+            find["Requirement"] = null;
+        }
+
+        this.logger.log('_getStoreConfig', fetch, find)
         return {
             fetch: fetch,
-            find: {
-                _ProjectHierarchy: this.getContext().getProject().ObjectID,
-                _TypeHierarchy: 'Defect',
-                State: {$in: includeStates},
-                _ValidTo: {$gte: startDate},
-                _ValidFrom: {$lte: endDate}
-            },
-            hydrate: ["State","Severity"],
+            find: find,
+            hydrate: ["State","Severity","_PreviousValues.State"],
             limit: "Infinity",
+            compress: true,
             removeUnauthorizedSnapshots: true
         };
+
 
     },
     _fetchData: function(config){
@@ -148,7 +299,7 @@ Ext.define("DefectBurndown", {
         return deferred;
     },
     getSettingsFields: function(){
-        return Rally.technicalservices.DefectsByFieldSettings.getFields(this.getSettings());
+        return Rally.technicalservices.DefectsByFieldSettings.getFields(this.getSettings(), this.stateAllowedValues);
     },
     getOptions: function() {
         return [
@@ -173,7 +324,28 @@ Ext.define("DefectBurndown", {
     onSettingsUpdate: function (settings){
         this.logger.log('onSettingsUpdate',settings);
         // Ext.apply(this, settings);
-        this._buildChart(settings);
+        if (this._validateSettings(settings)){
+            this._addSeverityOptions();
+        }
+        //this._buildChart(settings);
 
+    },
+    _fetchAllowedValues: function(model, fieldName){
+        var deferred = Ext.create('Deft.Deferred');
+
+        model.getField(fieldName).getAllowedValueStore().load({
+            callback: function(records, operation, success) {
+                this.logger.log('_fetchAllowedValues', records, operation);
+                if (success){
+                    var vals = _.map(records, function(r){ return r.get('StringValue'); });
+                    deferred.resolve(vals);
+                } else {
+                    deferred.reject("Error fetching category data");
+                }
+            },
+            scope: this
+        });
+
+        return deferred;
     }
 });
