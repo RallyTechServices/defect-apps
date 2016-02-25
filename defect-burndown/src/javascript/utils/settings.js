@@ -33,7 +33,7 @@ Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
             valueField: 'value',
         },{
             xtype: 'checkboxgroup',
-            fieldLabel: 'Include States',
+            fieldLabel: 'Active States',
             labelAlign: 'right',
             labelWidth: labelWidth,
             columns: 2,
@@ -50,7 +50,7 @@ Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
             labelWidth: labelWidth
         }, {
             xtype: 'radiogroup',
-            fieldLabel: 'Date Range',
+            fieldLabel: 'Date Boundaries',
             labelAlign: 'right',
             labelWidth: labelWidth,
             columns: 1,

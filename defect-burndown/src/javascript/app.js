@@ -222,7 +222,7 @@ Ext.define("DefectBurndown", {
             endDate = this._getEndDate(),
             granularity = this.getSetting('granularity'),
             total = Rally.util.DateTime.getDifference(endDate, startDate, granularity);
-        
+
         if (total < 10){
             return 1;
         }

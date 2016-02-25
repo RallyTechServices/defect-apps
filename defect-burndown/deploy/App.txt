@@ -3,11 +3,11 @@
 <head>
     <title>Defect Burndown</title>
     <!--  (c) 2015 Rally Software Development Corp.  All Rights Reserved. -->
-    <!--  Build Date: Thu Feb 25 2016 11:31:24 GMT-0700 (MST) -->
+    <!--  Build Date: Thu Feb 25 2016 12:02:47 GMT-0700 (MST) -->
     
     <script type="text/javascript">
-        var APP_BUILD_DATE = "Thu Feb 25 2016 11:31:24 GMT-0700 (MST)";
-        var CHECKSUM = 22838677996;
+        var APP_BUILD_DATE = "Thu Feb 25 2016 12:02:47 GMT-0700 (MST)";
+        var CHECKSUM = 22847461571;
     </script>
     
     <script type="text/javascript" src="/apps/2.0/sdk.js"></script>
@@ -420,7 +420,7 @@ Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
             valueField: 'value',
         },{
             xtype: 'checkboxgroup',
-            fieldLabel: 'Include States',
+            fieldLabel: 'Active States',
             labelAlign: 'right',
             labelWidth: labelWidth,
             columns: 2,
@@ -437,7 +437,7 @@ Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
             labelWidth: labelWidth
         }, {
             xtype: 'radiogroup',
-            fieldLabel: 'Date Range',
+            fieldLabel: 'Date Boundaries',
             labelAlign: 'right',
             labelWidth: labelWidth,
             columns: 1,
@@ -908,7 +908,7 @@ Ext.define("DefectBurndown", {
             endDate = this._getEndDate(),
             granularity = this.getSetting('granularity'),
             total = Rally.util.DateTime.getDifference(endDate, startDate, granularity);
-        
+
         if (total < 10){
             return 1;
         }

@@ -1,5 +1,27 @@
 #Defect Burndown
 
+Shows the active, new and closed defects over the selected time range.  
+
+Active defects is the count of defects in the "Active State" (as determined in the app configuration) for the time bucket (day, week, month, etc).
+Closed defects is the count of defects that transitioned from an Active State into an inactive state (or were deleted) for the time bucket.  
+New defects is the count of defects that were created on that day.  
+
+All defects are filtered by the selected Severities.  They are filtered by the severity value at the time of the latest snapshot when they were in an "Active State".   
+
+ ![ScreenShot](/images/defect-burndown.png)
+
+###App Configurations
+*  Granularity - the buckets of time (options are:  day, week, month)
+*  Active States - the defect states that are considered active.  
+*  Exclude User Story Defects - does not include defects that are associated with User Stories.  They are filtered out by whether or not they are associated with a defect at the time of hte latest snapshot when they were in an "Active State"
+*  Date Boundaries - defines the date range for the chart
+      * Selected Release - if the app is on a Release Scoped Dashboard, then this option will use the Release Start and End Dates.  
+      * Custom - Allows for user to enter custom start and end dates in the configuration
+      * Days from Today - This allows the user to enter an offset relative to today for the app to determine the date range
+                   (e.g. show data for the last 90 days would be Start Date = -90, End Date = 0)
+                   
+  ![ScreenShot](/images/defect-burndown-settings.png)
+
 ## Development Notes
 
 ### First Load
