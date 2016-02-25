@@ -3,11 +3,11 @@
 <head>
     <title>Defect Burndown</title>
     <!--  (c) 2015 Rally Software Development Corp.  All Rights Reserved. -->
-    <!--  Build Date: Fri Feb 19 2016 13:51:03 GMT-0700 (MST) -->
+    <!--  Build Date: Thu Feb 25 2016 12:02:47 GMT-0700 (MST) -->
     
     <script type="text/javascript">
-        var APP_BUILD_DATE = "Fri Feb 19 2016 13:51:03 GMT-0700 (MST)";
-        var CHECKSUM = 2902358670;
+        var APP_BUILD_DATE = "Thu Feb 25 2016 12:02:47 GMT-0700 (MST)";
+        var CHECKSUM = 22847461571;
     </script>
     
     <script type="text/javascript" src="/apps/2.0/sdk.js"></script>
@@ -176,50 +176,511 @@ Ext.define('Rally.technicalservices.Logger',{
 
 });
 
-Ext.define("DefectBurndownCalculator",{
-    extend: "Rally.data.lookback.calculator.TimeSeriesCalculator",
+Ext.define('SnapsCalculator',{
+    constructor: function(config){
 
-    getMetrics: function () {
-        return [
-            //{
-            //    "field": "ObjectID",
-            //    "as": "Count",
-            //    "display": "line",
-            //    "f": "count"
-            //},
-            {
-                "field": "FormattedID",
-                "as": "Defects",
-                "f": "filteredCount",
-                "filterField": "Severity",
-                "filterValues": this.includeSeverity,
-                "display": "column"
+        var snaps = config.snaps,
+            dateBuckets = config.dateBuckets,
+            currentSnapIndex = snaps.length - 1,
+            granularity = config.granularity,
+            includeStates = config.includeStates,
+            excludeUserStoryDefects = config.excludeUserStoryDefects,
+            includeSeverity = config.includeSeverity;
+
+        this.creationDate = Rally.util.DateTime.fromIsoString(snaps[currentSnapIndex].CreationDate);
+        this.severity = snaps[currentSnapIndex].Severity;
+        this.snaps = snaps;
+
+            var snapIndex = 0,
+                snap = snaps[snapIndex],
+                validFrom = Rally.util.DateTime.fromIsoString(snap._ValidFrom),
+                validTo =  Rally.util.DateTime.fromIsoString(snap._ValidTo),
+                endDate = Rally.util.DateTime.add(dateBuckets[0], granularity, -1),
+                startDate;
+
+
+            var created = _.map(dateBuckets, function(a){ return 0; }),
+                active = _.map(dateBuckets, function(a){ return 0; }),
+                closed = _.map(dateBuckets, function(a){ return 0; });
+
+            var include = Ext.Array.contains(includeSeverity, this.severity);
+            if (excludeUserStoryDefects && snaps[currentSnapIndex].Requirement){
+                include = false;
             }
+
+            if (include) {
+                for (var dateIndex = 0; dateIndex < dateBuckets.length; dateIndex++) {
+                    startDate = endDate;
+                    endDate = dateBuckets[dateIndex];
+
+                    if (this.creationDate <= endDate && this.creationDate > startDate) {
+                        created[dateIndex]++;
+                    }
+
+                    //Now make sure we have the current snapshot for the date bucket
+                    if (validTo < endDate) {
+                        snap = null;
+                        while (validTo < endDate && snapIndex < snaps.length - 1) {
+                            snapIndex++;
+                            snap = snaps[snapIndex];
+                            validTo = Rally.util.DateTime.fromIsoString(snap._ValidTo);
+                            validFrom = Rally.util.DateTime.fromIsoString(snap._ValidFrom);
+                        }
+                    }
+                    if (snap && validFrom < endDate) {
+                        if (Ext.Array.contains(includeStates, snap.State)) {
+                            active[dateIndex]++;
+                        }
+
+                        if (!Ext.Array.contains(includeStates, snap.State) &&
+                            snap._PreviousValues && Ext.Array.contains(includeStates, snap._PreviousValues.State) &&
+                            validFrom > startDate) {
+                            closed[dateIndex]++;
+                        }
+                    }
+                }
+            }
+
+        this.created = created;
+        this.active = active;
+        this.closed = closed;
+
+    }
+});
+
+
+Ext.define("DefectBurndownCalculator",{
+    extend: "Rally.data.lookback.calculator.BaseCalculator",
+    config: {
+        /**
+         * @cfg {String[]} workDays
+         * The days of the week to include in aggregation calculations
+         */
+        workDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+
+        /**
+         * @cfg {Object[]} holidays
+         * Configure the days to exclude from the aggregation calculations. They are objects with `year`, `day`, and
+         * `month` properties. For example:
+         *   {"year": 2011, "month": 12, "day": 25}
+         */
+        holidays: [],
+
+        /**
+         * @cfg {Date} startDate
+         * Set the start date of the calculation; no data will be emitted before this time point.
+         */
+        startDate: undefined,
+
+        /**
+         * @cfg {Date} endDate
+         * Set the end date of the calculation; no data will be emitted after this time point.
+         */
+        endDate: undefined,
+
+        /**
+         * @cfg {String} timeZone
+         * Set the time zone used during aggregation calculations. In the format of the zoneinfo database. See
+         * http://en.wikipedia.org/wiki/List_of_tz_database_time_zones for a list.
+         */
+        timeZone: "GMT",
+
+        dateFormat: {
+            day: 'm-d-Y',
+            week: 'M d, Y',
+            month: 'M Y'
+        }
+    },
+
+    runCalculation: function (snapshots) {
+        console.log('runCalculation', this.startDate, this.endDate)
+
+        var granularity = this.granularity,
+            dateBuckets = this.getDateBuckets(this.startDate, this.endDate, this.granularity);
+
+        var snapsByOid = this.aggregateSnapsByOid(snapshots),
+            includeStates = this.includeStates;
+
+        var objectData = [];
+        Ext.Object.each(snapsByOid, function(oid, snaps){
+            objectData.push(Ext.create('SnapsCalculator',{
+                snaps: snaps,
+                granularity: granularity,
+                dateBuckets: dateBuckets,
+                includeStates: includeStates,
+                includeSeverity: this.includeSeverity,
+                excludeUserStoryDefects: this.excludeUserStoryDefects
+            }));
+        }, this);
+
+        var seriesData = [
+            {name: 'New', type: 'line', data: _.map(dateBuckets, function(d){ return 0; })},
+            {name: 'Closed', type: 'line', data:_.map(dateBuckets, function(d){ return 0; })},
+            {name: 'Active', type: 'line', data:_.map(dateBuckets, function(d){ return 0; })},
         ];
+
+        for (var i=0; i<dateBuckets.length; i++){
+            Ext.Array.each(objectData, function(obj){
+                seriesData[0].data[i] += obj.created[i];
+                seriesData[1].data[i] += obj.closed[i];
+                seriesData[2].data[i] += obj.active[i];
+            });
+        }
+
+        return {
+            series: seriesData,
+            categories: this.formatDateBuckets(dateBuckets, this.dateFormat[granularity])
+        };
+    },
+    aggregateSnapsByOid: function(snaps){
+        //Return a hash of objects (key=ObjectID) with all snapshots for the object
+        var snaps_by_oid = {};
+        Ext.each(snaps, function(snap){
+            var oid = snap.ObjectID || snap.get('ObjectID');
+            if (snaps_by_oid[oid] == undefined){
+                snaps_by_oid[oid] = [];
+            }
+            snaps_by_oid[oid].push(snap);
+
+        });
+        return snaps_by_oid;
+    },
+
+    getDateBuckets: function(startDate, endDate, granularity){
+        var bucketStartDate = startDate,
+            bucketEndDate = endDate;
+
+        if (granularity === 'month'){
+            bucketStartDate = this.getBeginningOfMonthAsDate(startDate);
+            bucketEndDate = this.getEndOfMonthAsDate(endDate);
+        }
+
+        var date = bucketStartDate;
+
+        var buckets = [];
+        while (date<bucketEndDate && bucketStartDate < bucketEndDate){
+            buckets.push(date);
+            date = Rally.util.DateTime.add(date,granularity,1);
+        }
+        return buckets;
+    },
+    formatDateBuckets: function(buckets, dateFormat){
+        var categories = [];
+        Ext.each(buckets, function(bucket){
+            categories.push(Rally.util.DateTime.format(bucket,dateFormat));
+        });
+        categories[categories.length-1] += "*";
+        return categories;
+    },
+    getBeginningOfMonthAsDate: function(dateInMonth){
+        var year = dateInMonth.getFullYear();
+        var month = dateInMonth.getMonth();
+        return new Date(year,month,1,0,0,0,0);
+    },
+    getEndOfMonthAsDate: function(dateInMonth){
+        var year = dateInMonth.getFullYear();
+        var month = dateInMonth.getMonth();
+        var day = new Date(year, month+1,0).getDate();
+        return new Date(year,month,day,0,0,0,0);
     }
 });
 
 Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
     singleton: true,
 
-    getFields: function(settings){
+    getFields: function(settings, states){
 
         console.log('settings',settings);
+
+        var labelWidth = 200,
+            stateOptions = _.map(states, function(s){
+            console.log('state', s,Ext.Array.contains(settings.includeStates, s));
+            var checked = Ext.Array.contains(settings.includeStates, s);
+            return { boxLabel: s, name: 'includeStates', inputValue: s, checked: checked };
+        });
+
+        var granularityStore = Ext.create('Ext.data.Store',{
+            fields: ['name','value'],
+            data: [
+                    {name: "Day", value: 'day'},
+                    {name: "Week", value: 'week'},
+                    {name: "Month", value: 'month'}
+            ]
+        });
+
+
         return [{
-            xtype: 'rallyfieldvaluecombobox',
-            name: 'includeStates',
-            fieldLabel: 'Include States',
-            multiSelect: true,
-            model: settings.modelName,
-            field: 'State'
+            xtype: 'combobox',
+            fieldLabel: 'Granularity',
+            labelAlign: 'right',
+            labelWidth: labelWidth,
+            name: 'granularity',
+            store: granularityStore,
+            displayField: 'name',
+            valueField: 'value',
         },{
-            xtype: 'rallyfieldvaluecombobox',
-            name: 'includeSeverity',
-            fieldLabel: 'Include Severity',
-            multiSelect: true,
-            model: settings.modelName,
-            field: 'Severity'
+            xtype: 'checkboxgroup',
+            fieldLabel: 'Active States',
+            labelAlign: 'right',
+            labelWidth: labelWidth,
+            columns: 2,
+            width: 700,
+            margin: '0 0 25 0',
+            vertical: true,
+            items: stateOptions
+        }, {
+            xtype: 'rallycheckboxfield',
+            name: 'excludeUserStoryDefects',
+            fieldLabel: 'Exclude User Story Defects',
+            labelAlign: 'right',
+            margin: '0 0 10 0',
+            labelWidth: labelWidth
+        }, {
+            xtype: 'radiogroup',
+            fieldLabel: 'Date Boundaries',
+            labelAlign: 'right',
+            labelWidth: labelWidth,
+            columns: 1,
+            margin: '0 0 0 0',
+            vertical: true,
+            listeners: {
+                change: function(rg){
+                    _.each(rg.items.items, function(i){
+                        if (i && i.updateDateType){
+                            i.updateDateType(rg.getValue().dateType);
+                        }
+                    });
+                }
+            },
+            items: [
+                {
+                    name: "dateType",
+                    itemId: "release",
+                    boxLabel: "Selected Release",
+                    baseLabel: "Selected Release",
+                    inputValue: "release",
+                    checked: settings.dateType === "release"
+                }, {
+                    name: "dateType",
+                    itemId: "custom",
+                    boxLabel: "Custom",
+                    baseLabel: "Custom",
+                    inputValue: "custom",
+                    checked: settings.dateType === "custom"
+                },{
+                        xtype: 'rallydatefield',
+                        name: 'customStartDate',
+                        labelAlign: 'right',
+                        labelWidth: labelWidth - 100,
+                        fieldLabel: 'Start Date',
+                        disabled: settings.dateType !== "custom",
+                        value: settings.customStartDate,
+                        updateDateType: function(dateType){
+                            this.setDisabled(dateType !== "custom");
+                        }
+                    }, {
+                        xtype: 'rallydatefield',
+                        name: 'customEndDate',
+                        labelAlign: 'right',
+                        labelWidth: labelWidth - 100,
+                        fieldLabel: 'End Date',
+                        disabled: settings.dateType !== "custom",
+                        value: settings.customEndDate,
+                        margin: '0 0 15 0',
+                        updateDateType: function(dateType){
+                            this.setDisabled(dateType !== "custom");
+                        }
+
+                }, {
+                    name: "dateType",
+                    itemId: "offset",
+                    boxLabel: "Days from Today (e.g. Start Date = -30 displays data starting on " + Rally.util.DateTime.formatWithDefault(Rally.util.DateTime.add(new Date(), 'day', -30)) + ")",
+                    baseLabel: "Days from Today (e.g. Start Date = -30 displays data starting on " + Rally.util.DateTime.formatWithDefault(Rally.util.DateTime.add(new Date(), 'day', -30)) + ")",
+                    inputValue: "offset",
+                    checked: settings.dateType === "offset"
+                }, {
+                        xtype: 'rallynumberfield',
+                        name: 'offsetStartDate',
+                        labelAlign: 'right',
+                        labelWidth: labelWidth - 100,
+                        fieldLabel: 'Start Date',
+                        disabled: settings.dateType !== "offset",
+                        value: settings.offsetStartDate,
+                        maxValue: -1,
+                        updateDateType: function(dateType){
+                            this.setDisabled(dateType !== "offset");
+                        }
+                    }, {
+                        xtype: 'rallynumberfield',
+                        name: 'offsetEndDate',
+                        labelAlign: 'right',
+                        labelWidth: labelWidth - 100,
+                        fieldLabel: 'End Date',
+                        value: settings.offsetEndDate,
+                        maxValue: 0,
+                        disabled: settings.dateType !== "offset",
+                        updateDateType: function(dateType){
+                            this.setDisabled(dateType !== "offset");
+                        }
+                }]
         }];
+        //},{
+            //xtype: "fieldcontainer",
+            //layout: {type: 'hbox'},
+            //items: [{
+            //    xtype: "container",
+            //    minWidth: 250,
+            //    items: [
+            //        {
+            //            xtype: "label",
+            //            text: "Start Date",
+            //            cls: "settingsLabel"
+            //        },
+            //        {
+            //            xtype: "radiogroup",
+            //            name: "startdate",
+            //            itemId: "startdategroup",
+            //            columns: 1,
+            //            vertical: true,
+            //            items: [
+            //                {
+            //                    name: "startdate",
+            //                    itemId: "release",
+            //                    boxLabel: "Use Release",
+            //                    baseLabel: "Actual Start Date",
+            //                    inputValue: "actualstartdate",
+            //                    checked: startDate[0] === "actualstartdate"
+            //                },
+            //                {
+            //                    name: "startdate",
+            //                    itemId: "plannedstartdate",
+            //                    boxLabel: "Planned Start Date",
+            //                    baseLabel: "Planned Start Date",
+            //                    inputValue: "plannedstartdate",
+            //                    checked: startDate[0] === "plannedstartdate"
+            //                },
+            //                {
+            //                    xtype: "container",
+            //                    layout: {
+            //                        type: "hbox"
+            //                    },
+            //                    items: [
+            //                        {
+            //                            xtype: "radiofield",
+            //                            name: "startdate",
+            //                            itemId: "startdatemanual",
+            //                            boxLabel: " ",
+            //                            inputValue: "selecteddate",
+            //                            checked: startDate[0] === "selecteddate"
+            //                        },
+            //                        {
+            //                            xtype: "rallydatefield",
+            //                            name: "startdate",
+            //                            itemId: "startdatefield",
+            //                            inputValue: "selecteddate",
+            //                            value: startDate[1] || ''
+            //                        }
+            //                    ]
+            //                }
+            //            ]
+            //        },
+            //        {
+            //            xtype: "container",
+            //            minWidth: 250,
+            //            items: [
+            //                {
+            //                    xtype: "label",
+            //                    text: "End Date",
+            //                    cls: "settingsLabel"
+            //                },
+            //                {
+            //                    xtype: "radiogroup",
+            //                    name: "enddate",
+            //                    itemId: "enddategroup",
+            //                    columns: 1,
+            //                    vertical: true,
+            //                    items: [
+            //                        {
+            //                            name: "enddate",
+            //                            itemId: 'today',
+            //                            boxLabel: "Today",
+            //                            inputValue: "today",
+            //                            checked: endDate[0] === "today"
+            //                        },
+            //                        {
+            //                            name: "enddate",
+            //                            itemId: "actualenddate",
+            //                            boxLabel: "Actual End Date",
+            //                            baseLabel: "Actual End Date",
+            //                            inputValue: "actualenddate",
+            //                            checked: endDate[0] === "actualenddate"
+            //                        },
+            //                        {
+            //                            name: "enddate",
+            //                            itemId: "plannedenddate",
+            //                            boxLabel: "Planned End Date",
+            //                            baseLabel: "Planned End Date",
+            //                            inputValue: "plannedenddate",
+            //                            checked: endDate[0] === "plannedenddate"
+            //                        },
+            //                        {
+            //                            xtype: "container",
+            //                            layout: {
+            //                                type: "hbox"
+            //                            },
+            //                            items: [
+            //                                {
+            //                                    xtype: "radiofield",
+            //                                    name: "enddate",
+            //                                    itemId: "enddatemanual",
+            //                                    boxLabel: " ",
+            //                                    inputValue: "selecteddate",
+            //                                    checked: endDate[0] === "selecteddate"
+            //                                },
+            //                                {
+            //                                    xtype: "rallydatefield",
+            //                                    name: "enddate",
+            //                                    itemId: "enddatefield",
+            //                                    inputValue: "selecteddate",
+            //                                    value: endDate[1] || ""
+            //                                }
+            //                            ]
+            //                        }
+            //                    ]
+            //                }
+            //            ]
+            //        }
+            //    ]
+            //}]
+        //},{
+        //    xtype: 'textarea',
+        //    labelAlign: 'right',
+        //    fieldLabel: 'Query',
+        //    name: 'query',
+        //    labelWidth: labelWidth,
+        //    anchor: '100%',
+        //    cls: 'query-field',
+        //    margin: '0 70 0 0',
+        //    plugins: [
+        //        {
+        //            ptype: 'rallyhelpfield',
+        //            helpId: 194
+        //        },
+        //        'rallyfieldvalidationui'
+        //    ],
+        //    validateOnBlur: false,
+        //    validateOnChange: false,
+        //    validator: function(value) {
+        //        try {
+        //            if (value) {
+        //                Rally.data.wsapi.Filter.fromQueryString(value);
+        //            }
+        //            return true;
+        //        } catch (e) {
+        //            return e.message;
+        //        }
+        //    }
+        //}];
     }
 });
 
@@ -234,7 +695,14 @@ Ext.define("DefectBurndown", {
             includeStates: ['Open', 'Submitted'],
             modelName: 'Defect',
             includeSeverity: ['Critical','Major Problem'],
-            alwaysFetch: ['FormattedID','ObjectID','State','Severity','_ValidFrom','_ValidTo']
+            alwaysFetch: ['FormattedID','ObjectID','State','Severity','CreationDate',"_PreviousValues.State",'_ValidFrom','_ValidTo', 'Requirement'],
+            excludeUserStoryDefects: true,
+            granularity: 'day',
+            dateType: 'release',
+            offsetStartDate: -60,
+            offsetEndDate: 0,
+            customStartDate: Rally.util.DateTime.add(new Date(), 'day', -60),
+            customEndDate: Rally.util.DateTime.add(new Date())
         }
     },
 
@@ -242,19 +710,130 @@ Ext.define("DefectBurndown", {
         name : "DefectBurndown"
     },
 
-    launch: function() {
-        this._buildChart(this.getSettings());
-    },
-    _buildChart: function(settings){
-        this.logger.log('_buildChart');
-        this.removeAll();
-        var startDate = Rally.util.DateTime.add(new Date(), 'day', -100),
-            endDate = new Date(),
-            storeConfig = this._getStoreConfig(settings, startDate, endDate);
+    severityAllowedValues: undefined,
+    stateAllowedValues: undefined,
 
-        var includeSeverity = settings.includeSeverity;
-        if (Ext.isString(includeSeverity)){
-            includeSeverity = includeSeverity.split(',');
+    launch: function() {
+        this._initializeApp();
+    },
+
+    _initializeApp: function(){
+
+        Rally.data.ModelFactory.getModel({
+            type: 'Defect',
+            success: function (model) {
+                this.model = model;
+                Deft.Promise.all([
+                    this._fetchAllowedValues(model, 'State'),
+                    this._fetchAllowedValues(model, 'Severity')]).then({
+
+                    success: function (results) {
+                        this.logger.log('launch', results);
+                        this.stateAllowedValues = results[0];
+                        this.severityAllowedValues = results[1];
+
+                        if (this._validateSettings(this.getSettings())){
+                            this._addSeverityOptions();
+                        }
+                    },
+                    failure: function (msg) {
+                        Rally.ui.notify.Notifier.showError({message: msg});
+                    },
+                    scope: this
+                });
+            },
+            scope: this
+        });
+    },
+    _validateSettings: function(settings){
+        this.logger.log('_validateSettings', settings);
+        var msg = 'Please configure included defect states in the App Settings.';
+        if (settings && settings.includeStates && settings.includeStates.length > 0){
+            var startDate = this._getStartDate(),
+                endDate = this._getEndDate();
+
+            if (startDate && endDate){
+                if (Date.parse(startDate) < Date.parse(endDate)){
+                    return true;
+                }
+                msg = "Please select a Start Date that falls before the selected End Date."
+
+            } else {
+
+                if (settings.dateType === "release"){
+                    msg = "A release date range has been selected in the App Settings.  Please confirm app is being run on a release scoped dashboard page."
+                } else {
+                    msg = "Please select a valid custom date range in the App Settings."
+                }
+            }
+        }
+        this.removeAll();
+        this.add({
+            xtype: 'container',
+            html: msg
+        });
+        return false;
+    },
+    _addSeverityOptions: function(){
+        this.removeAll();
+
+        var labelWidth = 100,
+            severityOptions = _.map(this.severityAllowedValues, function(s){
+               return { boxLabel: s || "None",  inputValue: s, checked: true };
+            }),
+            columns = Math.min(8, severityOptions.length);
+
+        this.add({
+            xtype: 'container',
+            layout: 'hbox',
+            items: [{
+                xtype: 'checkboxgroup',
+                fieldLabel: 'Include Severity',
+                labelAlign: 'right',
+                itemId: 'includeSeverity',
+                labelWidth: labelWidth,
+                columns: columns,
+                flex: 1,
+                margin: 10,
+                vertical: true,
+                items: severityOptions
+            },{
+                xtype: 'rallybutton',
+                text: 'Refresh',
+                margin: '10 10 10 100',
+                itemId: 'btn-refresh',
+                disabled: true
+            }]
+        });
+
+        var btn = this.down('#btn-refresh');
+        btn.on('click', this._buildChart, this);
+
+        this.down('#includeSeverity').on('change', function(cg){
+            btn.setDisabled(false);
+        }, this);
+
+        this._buildChart();
+    },
+    _buildChart: function(btn){
+        var settings = this.getSettings(),
+            cg = this.down('#includeSeverity');
+
+        if (btn) { btn.setDisabled(true); };
+        this.logger.log('_buildChart',  settings);
+
+        if (this.down('rallychart')){
+            this.down('rallychart').destroy();
+        }
+
+        var query = settings.query,
+            startDate = this._getStartDate(),
+            endDate = this._getEndDate(),
+            storeConfig = this._getStoreConfig(settings, startDate, endDate, query);
+
+        var includeSeverity = this.severityAllowedValues;
+        if (cg && cg.getValue){
+            includeSeverity = _.values(cg.getValue());
         }
 
         this.add({
@@ -264,21 +843,79 @@ Ext.define("DefectBurndown", {
             calculatorType: 'DefectBurndownCalculator',
             calculatorConfig: {
                 includeSeverity: includeSeverity,
-                startDate: Rally.util.DateTime.toIsoString(startDate, true),
-                endDate: Rally.util.DateTime.toIsoString(endDate, true)
+                includeStates: settings.includeStates,
+                startDate: startDate,
+                endDate: endDate,
+                granularity: settings.granularity,
+                excludeUserStoryDefects: (settings.excludeUserStoryDefects === true || settings.excludeUserStoryDefects === 'true')
             },
             chartConfig: this._getChartConfig()
         });
+    },
+    _getStartDate: function(){
+        var settings = this.getSettings(),
+            startDate = null;
 
-        //this.add({
-        //    xtype: 'rallychart',
-        //    loadMask: false,
-        //    chartConfig: this._getChartConfig(),
-        //    chartData: this._getChartData(records)
-        //});
+        switch (settings.dateType){
+            case "release":
+                startDate = this.getContext().getTimeboxScope() &&
+                    this.getContext().getTimeboxScope().type === 'release' &&
+                    this.getContext().getTimeboxScope().getRecord() &&
+                        Rally.util.DateTime.fromIsoString(this.getContext().getTimeboxScope().getRecord().get('ReleaseStartDate')) || null;
+                break;
 
+            case "offset":
+                startDate = Rally.util.DateTime.add(new Date(), 'day', settings.offsetStartDate);
+                break;
+
+            case "custom":
+                startDate = settings.customStartDate;
+                break;
+        }
+        if (startDate){
+            return new Date(startDate);
+        }
+        return null;
+    },
+    _getEndDate: function(){
+        var settings = this.getSettings(),
+            endDate = null;
+
+        switch (settings.dateType){
+            case "release":
+                endDate = this.getContext().getTimeboxScope() &&
+                    this.getContext().getTimeboxScope().type === 'release' &&
+                    this.getContext().getTimeboxScope().getRecord() &&
+                    Rally.util.DateTime.fromIsoString(this.getContext().getTimeboxScope().getRecord().get('ReleaseDate')) || null;
+                break;
+
+            case "offset":
+                endDate = Rally.util.DateTime.add(new Date(), 'day', settings.offsetEndDate);
+                break;
+
+            case "custom":
+                endDate = settings.customEndDate;
+                break;
+        }
+        if (endDate){
+            return new Date(endDate);
+        }
+        return null;
+    },
+
+    _getTickInterval: function(){
+        var startDate = this._getStartDate(),
+            endDate = this._getEndDate(),
+            granularity = this.getSetting('granularity'),
+            total = Rally.util.DateTime.getDifference(endDate, startDate, granularity);
+
+        if (total < 10){
+            return 1;
+        }
+        return Math.round(total/10);
     },
     _getChartConfig: function(){
+        var tickInterval = this._getTickInterval();
         return {
             chart: {
                 defaultSeriesType: 'area',
@@ -290,7 +927,7 @@ Ext.define("DefectBurndown", {
             xAxis: {
                 categories: [],
                 tickmarkPlacement: 'on',
-                tickInterval: 5,
+                tickInterval: tickInterval,
                 title: {
                     text: 'Date',
                     margin: 10
@@ -300,7 +937,8 @@ Ext.define("DefectBurndown", {
                 {
                     title: {
                         text: 'Count'
-                    }
+                    },
+                    min: 0
                 }
             ],
             tooltip: {
@@ -330,7 +968,7 @@ Ext.define("DefectBurndown", {
     _showError: function(msg){
         Rally.ui.notify.Notifier.showError(msg);
     },
-    _getStoreConfig: function(settings, startDate, endDate){
+    _getStoreConfig: function(settings, startDate, endDate, query){
         var fetch = settings.alwaysFetch;
 
         startDate = Rally.util.DateTime.toIsoString(startDate);
@@ -340,19 +978,26 @@ Ext.define("DefectBurndown", {
             includeStates = includeStates.split(',');
         }
 
+        var find = {
+            _ProjectHierarchy: this.getContext().getProject().ObjectID,
+            _TypeHierarchy: 'Defect',
+            "$or": [{State: {$in: includeStates}}, {"_PreviousValues.State": {$in: includeStates}}],
+            _ValidTo: {$gte: startDate},
+            _ValidFrom: {$lte: endDate}
+        };
+
+
+        this.logger.log('_getStoreConfig', fetch, find)
         return {
             fetch: fetch,
-            find: {
-                _ProjectHierarchy: this.getContext().getProject().ObjectID,
-                _TypeHierarchy: 'Defect',
-                State: {$in: includeStates},
-                _ValidTo: {$gte: startDate},
-                _ValidFrom: {$lte: endDate}
-            },
-            hydrate: ["State","Severity"],
+            find: find,
+            hydrate: ["State","Severity","_PreviousValues.State"],
             limit: "Infinity",
-            removeUnauthorizedSnapshots: true
+            compress: true,
+            removeUnauthorizedSnapshots: true,
+            sort: {"_ValidFrom": 1 }
         };
+
 
     },
     _fetchData: function(config){
@@ -373,7 +1018,7 @@ Ext.define("DefectBurndown", {
         return deferred;
     },
     getSettingsFields: function(){
-        return Rally.technicalservices.DefectsByFieldSettings.getFields(this.getSettings());
+        return Rally.technicalservices.DefectsByFieldSettings.getFields(this.getSettings(), this.stateAllowedValues);
     },
     getOptions: function() {
         return [
@@ -398,8 +1043,29 @@ Ext.define("DefectBurndown", {
     onSettingsUpdate: function (settings){
         this.logger.log('onSettingsUpdate',settings);
         // Ext.apply(this, settings);
-        this._buildChart(settings);
+        if (this._validateSettings(settings)){
+            this._addSeverityOptions();
+        }
+        //this._buildChart(settings);
 
+    },
+    _fetchAllowedValues: function(model, fieldName){
+        var deferred = Ext.create('Deft.Deferred');
+
+        model.getField(fieldName).getAllowedValueStore().load({
+            callback: function(records, operation, success) {
+                this.logger.log('_fetchAllowedValues', records, operation);
+                if (success){
+                    var vals = _.map(records, function(r){ return r.get('StringValue').length === 0 ? "None" : r.get('StringValue'); });
+                    deferred.resolve(vals);
+                } else {
+                    deferred.reject("Error fetching category data");
+                }
+            },
+            scope: this
+        });
+
+        return deferred;
     }
 });
 

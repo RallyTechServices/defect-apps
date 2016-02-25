@@ -3,7 +3,7 @@ Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
 
     getFields: function(settings, states){
         var labelWidth = 150,
-            width = 300;
+            width = 400;
 
 
         var stateOptions = _.map(states, function(s){
@@ -22,15 +22,6 @@ Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
             width: width,
             model: settings.modelName,
             allowNoEntry: false
-        },{
-            xtype: 'checkboxgroup',
-            fieldLabel: 'Include States',
-            labelWidth: labelWidth,
-            width: width,
-            labelAlign: 'right',
-            columns: 1,
-            vertical: true,
-            items: stateOptions
         }, {
             xtype: 'tsfieldoptionscombobox',
             name: 'stackField',
@@ -42,6 +33,17 @@ Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
             allowNoEntry: true,
             noEntryText: '-- No Stacks --',
             noEntryValue: null
+        },{
+            xtype: 'checkboxgroup',
+            fieldLabel: 'Include States',
+            labelWidth: labelWidth,
+            width: width,
+            labelAlign: 'right',
+            columns: 2,
+            vertical: true,
+            margin: '15 0 15 0',
+            items: stateOptions
+
         },{
             xtype: 'rallycheckboxfield',
             fieldLabel: 'Include empty categories',
