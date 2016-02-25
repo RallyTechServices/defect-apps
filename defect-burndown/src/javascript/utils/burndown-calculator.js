@@ -1,4 +1,4 @@
-Ext.define('ObjectCalculator',{
+Ext.define('SnapsCalculator',{
     constructor: function(config){
 
         var snaps = config.snaps,
@@ -29,9 +29,6 @@ Ext.define('ObjectCalculator',{
             if (excludeUserStoryDefects && snaps[currentSnapIndex].Requirement){
                 include = false;
             }
-        if (include === false){
-            console.log('include', include, includeSeverity, this.severity, excludeUserStoryDefects, snaps[currentSnapIndex].Requirement);
-        }
 
             if (include) {
                 for (var dateIndex = 0; dateIndex < dateBuckets.length; dateIndex++) {
@@ -65,7 +62,7 @@ Ext.define('ObjectCalculator',{
                     }
                 }
             }
-        console.log('this', this);
+
         this.created = created;
         this.active = active;
         this.closed = closed;
@@ -108,7 +105,13 @@ Ext.define("DefectBurndownCalculator",{
          * Set the time zone used during aggregation calculations. In the format of the zoneinfo database. See
          * http://en.wikipedia.org/wiki/List_of_tz_database_time_zones for a list.
          */
-        timeZone: "GMT"
+        timeZone: "GMT",
+
+        dateFormat: {
+            day: 'm-d-Y',
+            week: 'M d, Y',
+            month: 'M Y'
+        }
     },
 
     runCalculation: function (snapshots) {
@@ -117,13 +120,12 @@ Ext.define("DefectBurndownCalculator",{
         var granularity = this.granularity,
             dateBuckets = this.getDateBuckets(this.startDate, this.endDate, this.granularity);
 
-        console.log('runCalculator', snapshots);
         var snapsByOid = this.aggregateSnapsByOid(snapshots),
             includeStates = this.includeStates;
 
         var objectData = [];
         Ext.Object.each(snapsByOid, function(oid, snaps){
-            objectData.push(Ext.create('ObjectCalculator',{
+            objectData.push(Ext.create('SnapsCalculator',{
                 snaps: snaps,
                 granularity: granularity,
                 dateBuckets: dateBuckets,
@@ -146,10 +148,10 @@ Ext.define("DefectBurndownCalculator",{
                 seriesData[2].data[i] += obj.active[i];
             });
         }
-        console.log('series', seriesData, dateBuckets);
+
         return {
             series: seriesData,
-            categories: dateBuckets
+            categories: this.formatDateBuckets(dateBuckets, this.dateFormat[granularity])
         };
     },
     aggregateSnapsByOid: function(snaps){
@@ -167,9 +169,13 @@ Ext.define("DefectBurndownCalculator",{
     },
 
     getDateBuckets: function(startDate, endDate, granularity){
+        var bucketStartDate = startDate,
+            bucketEndDate = endDate;
 
-        var bucketStartDate = this.getBeginningOfMonthAsDate(startDate);
-        var bucketEndDate = this.getEndOfMonthAsDate(endDate);
+        if (granularity === 'month'){
+            bucketStartDate = this.getBeginningOfMonthAsDate(startDate);
+            bucketEndDate = this.getEndOfMonthAsDate(endDate);
+        }
 
         var date = bucketStartDate;
 
@@ -198,99 +204,5 @@ Ext.define("DefectBurndownCalculator",{
         var month = dateInMonth.getMonth();
         var day = new Date(year, month+1,0).getDate();
         return new Date(year,month,day,0,0,0,0);
-    },
-    //extend: "Rally.data.lookback.calculator.TimeSeriesCalculator",
-    //
-    //runCalculation: function (snapshots) {
-    //    var calculatorConfig = this._prepareCalculatorConfig(),
-    //        seriesConfig = this._buildSeriesConfig(calculatorConfig);
-    //
-    //    var calculator = this.prepareCalculator(calculatorConfig);
-    //    console.log('calculator', calculator);
-    //    calculator.addSnapshots(snapshots, this._getStartDate(snapshots), this._getEndDate(snapshots));
-    //
-    //    return this._transformLumenizeDataToHighchartsSeries(calculator, seriesConfig);
-    //},
-    //
-    //
-    //getMetrics: function(){
-    //
-    //    return [{
-    //        field: "isActive",
-    //        as: "Active Defects",
-    //        f: "sum",
-    //        display: "line"
-    //    },{
-    //        field: "isNew",
-    //        as: "New Defects",
-    //        f: "sum",
-    //        display: "line"
-    //    },{
-    //        field: "isClosed",
-    //        as: "Closed Defects",
-    //        f: "sum",
-    //        display: "line"
-    //    }];
-    //},
-    //
-    //getDerivedFieldsOnInput: function () {
-    //    console.log('getMetrics',this.includeStates,this.includeSeverity)
-    //    var includeStates = this.includeStates,
-    //        includeSeverity = this.includeSeverity;
-    //
-    //    return [
-    //        {
-    //            "as": "isActive",
-    //            "f": function(snapshot){
-    //                if  (Ext.Array.contains(includeStates, snapshot.State) && Ext.Array.contains(includeSeverity, snapshot.Severity)) {
-    //                    return 1;
-    //                }
-    //                return 0;
-    //            }
-    //        },{
-    //            "as": "isClosed",
-    //            "f": function(snapshot){
-    //                var previousState = snapshot._PreviousValues && snapshot._PreviousValues.State,
-    //                    stateClosed = !Ext.Array.contains(includeStates, snapshot.State),
-    //                    stateWasOpen = Ext.Array.contains(includeStates, previousState);
-    //
-    //                return stateClosed && stateWasOpen && Ext.Array.contains(includeSeverity, snapshot.Severity);
-    //            }
-    //        },{
-    //            "as": "isNew",
-    //            "f": function(snapshot){
-    //                var previousState = snapshot._PreviousValues,
-    //                    include = Ext.Array.contains(includeStates, snapshot.State) && Ext.Array.contains(includeSeverity, snapshot.Severity);
-    //
-    //                if (include && previousState){
-    //                    if ((previousState.State === null)|| (!Ext.Array.contains(includeStates, previousState.State))){
-    //                        return 1;
-    //                    }
-    //                }
-    //                return 0;
-    //            }
-    //        }
-    //    ];
-    //},
-    //getDerivedFieldsAfterSummary: function () {
-    //    return [{
-    //        "as": "NewDefects",
-    //        "f": function(snapshot, index, metrics, seriesData){
-    //            console.log('snapshot', snapshot, snapshot.isActive);
-    //            if (index > 0){
-    //                return snapshot["Active Defects"] - seriesData[index-1]["Active Defects"];
-    //            }
-    //            return 0;
-    //
-    //        }
-    //    },{
-    //        "as": "ClosedDefects",
-    //        "f": function(snapshot, index, metrics, seriesData){
-    //            if (index > 0){
-    //                return snapshot["Closed Defects"] - seriesData[index-1]["Closed Defects"];
-    //            }
-    //            return 0;
-    //        }
-    //    }];
-    //}
+    }
 });

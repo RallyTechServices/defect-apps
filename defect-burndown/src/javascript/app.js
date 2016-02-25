@@ -216,7 +216,20 @@ Ext.define("DefectBurndown", {
         }
         return null;
     },
+
+    _getTickInterval: function(){
+        var startDate = this._getStartDate(),
+            endDate = this._getEndDate(),
+            granularity = this.getSetting('granularity'),
+            total = Rally.util.DateTime.getDifference(endDate, startDate, granularity);
+        
+        if (total < 10){
+            return 1;
+        }
+        return Math.round(total/10);
+    },
     _getChartConfig: function(){
+        var tickInterval = this._getTickInterval();
         return {
             chart: {
                 defaultSeriesType: 'area',
@@ -228,7 +241,7 @@ Ext.define("DefectBurndown", {
             xAxis: {
                 categories: [],
                 tickmarkPlacement: 'on',
-                tickInterval: 5,
+                tickInterval: tickInterval,
                 title: {
                     text: 'Date',
                     margin: 10
@@ -238,7 +251,8 @@ Ext.define("DefectBurndown", {
                 {
                     title: {
                         text: 'Count'
-                    }
+                    },
+                    min: 0
                 }
             ],
             tooltip: {
