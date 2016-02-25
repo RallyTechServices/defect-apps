@@ -9,7 +9,7 @@ Ext.define("DefectBurndown", {
             includeStates: ['Open', 'Submitted'],
             modelName: 'Defect',
             includeSeverity: ['Critical','Major Problem'],
-            alwaysFetch: ['FormattedID','ObjectID','State','Severity','CreationDate',"_PreviousValues.State",'_ValidFrom','_ValidTo','_SnapshotNumber'],
+            alwaysFetch: ['FormattedID','ObjectID','State','Severity','CreationDate',"_PreviousValues.State",'_ValidFrom','_ValidTo', 'Requirement'],
             excludeUserStoryDefects: true,
             granularity: 'day',
             dateType: 'release',
@@ -95,27 +95,46 @@ Ext.define("DefectBurndown", {
             severityOptions = _.map(this.severityAllowedValues, function(s){
                return { boxLabel: s || "None",  inputValue: s, checked: true };
             }),
-            columns = Math.min(8, severityOptions.length),
-            width = columns * 12 + '%';
+            columns = Math.min(8, severityOptions.length);
 
-        var cg = this.add({
-            xtype: 'checkboxgroup',
-            fieldLabel: 'Include Severity',
-            labelAlign: 'right',
-            itemId: 'includeSeverity',
-            labelWidth: labelWidth,
-            columns: columns,
-            width: width,
-            margin: '10 10 25 10',
-            vertical: true,
-            items: severityOptions
+        this.add({
+            xtype: 'container',
+            layout: 'hbox',
+            items: [{
+                xtype: 'checkboxgroup',
+                fieldLabel: 'Include Severity',
+                labelAlign: 'right',
+                itemId: 'includeSeverity',
+                labelWidth: labelWidth,
+                columns: columns,
+                flex: 1,
+                margin: 10,
+                vertical: true,
+                items: severityOptions
+            },{
+                xtype: 'rallybutton',
+                text: 'Refresh',
+                margin: '10 10 10 100',
+                itemId: 'btn-refresh',
+                disabled: true
+            }]
         });
-        cg.on('change', this._buildChart, this);
+
+        var btn = this.down('#btn-refresh');
+        btn.on('click', this._buildChart, this);
+
+        this.down('#includeSeverity').on('change', function(cg){
+            btn.setDisabled(false);
+        }, this);
+
         this._buildChart();
     },
-    _buildChart: function(cg){
-        var settings = this.getSettings();
-        this.logger.log('_buildChart',  settings.includeStates);
+    _buildChart: function(btn){
+        var settings = this.getSettings(),
+            cg = this.down('#includeSeverity');
+
+        if (btn) { btn.setDisabled(true); };
+        this.logger.log('_buildChart',  settings);
 
         if (this.down('rallychart')){
             this.down('rallychart').destroy();
@@ -139,9 +158,10 @@ Ext.define("DefectBurndown", {
             calculatorConfig: {
                 includeSeverity: includeSeverity,
                 includeStates: settings.includeStates,
-                startDate: Rally.util.DateTime.toIsoString(startDate, true),
-                endDate: Rally.util.DateTime.toIsoString(endDate, true),
-                granularity: settings.granularity
+                startDate: startDate,
+                endDate: endDate,
+                granularity: settings.granularity,
+                excludeUserStoryDefects: (settings.excludeUserStoryDefects === true || settings.excludeUserStoryDefects === 'true')
             },
             chartConfig: this._getChartConfig()
         });
@@ -265,9 +285,7 @@ Ext.define("DefectBurndown", {
             _ValidTo: {$gte: startDate},
             _ValidFrom: {$lte: endDate}
         };
-        if (settings.excludeUserStoryDefects === false || settings.excludeUserStoryDefects === 'false'){
-            find["Requirement"] = null;
-        }
+
 
         this.logger.log('_getStoreConfig', fetch, find)
         return {
@@ -276,7 +294,8 @@ Ext.define("DefectBurndown", {
             hydrate: ["State","Severity","_PreviousValues.State"],
             limit: "Infinity",
             compress: true,
-            removeUnauthorizedSnapshots: true
+            removeUnauthorizedSnapshots: true,
+            sort: {"_ValidFrom": 1 }
         };
 
 
@@ -337,7 +356,7 @@ Ext.define("DefectBurndown", {
             callback: function(records, operation, success) {
                 this.logger.log('_fetchAllowedValues', records, operation);
                 if (success){
-                    var vals = _.map(records, function(r){ return r.get('StringValue'); });
+                    var vals = _.map(records, function(r){ return r.get('StringValue').length === 0 ? "None" : r.get('StringValue'); });
                     deferred.resolve(vals);
                 } else {
                     deferred.reject("Error fetching category data");
