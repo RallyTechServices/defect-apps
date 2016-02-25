@@ -5,10 +5,13 @@ Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
         var labelWidth = 150,
             width = 400;
 
+        var allowedStates = settings && settings.allowedStates;
+        if (allowedStates && Ext.isString(allowedStates)){
+            allowedStates = allowedStates.split(',');
+        }
 
         var stateOptions = _.map(states, function(s){
-            console.log('state', s,Ext.Array.contains(settings.allowedStates, s));
-            var checked = Ext.Array.contains(settings.allowedStates, s);
+            var checked = Ext.Array.contains(allowedStates, s);
             return { boxLabel: s, name: 'allowedStates', inputValue: s, checked: checked };
         });
 
