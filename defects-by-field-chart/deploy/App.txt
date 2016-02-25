@@ -3,11 +3,11 @@
 <head>
     <title>Defects by Field Value</title>
     <!--  (c) 2015 Rally Software Development Corp.  All Rights Reserved. -->
-    <!--  Build Date: Tue Feb 23 2016 15:44:27 GMT-0700 (MST) -->
+    <!--  Build Date: Thu Feb 25 2016 15:08:13 GMT-0700 (MST) -->
     
     <script type="text/javascript">
-        var APP_BUILD_DATE = "Tue Feb 23 2016 15:44:27 GMT-0700 (MST)";
-        var CHECKSUM = 8435074526;
+        var APP_BUILD_DATE = "Thu Feb 25 2016 15:08:13 GMT-0700 (MST)";
+        var CHECKSUM = 8676130400;
     </script>
     
     <script type="text/javascript" src="/apps/2.0/sdk.js"></script>
@@ -288,12 +288,15 @@ Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
 
     getFields: function(settings, states){
         var labelWidth = 150,
-            width = 300;
+            width = 400;
 
+        var allowedStates = settings && settings.allowedStates;
+        if (allowedStates && Ext.isString(allowedStates)){
+            allowedStates = allowedStates.split(',');
+        }
 
         var stateOptions = _.map(states, function(s){
-            console.log('state', s,Ext.Array.contains(settings.allowedStates, s));
-            var checked = Ext.Array.contains(settings.allowedStates, s);
+            var checked = Ext.Array.contains(allowedStates, s);
             return { boxLabel: s, name: 'allowedStates', inputValue: s, checked: checked };
         });
 
@@ -307,15 +310,6 @@ Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
             width: width,
             model: settings.modelName,
             allowNoEntry: false
-        },{
-            xtype: 'checkboxgroup',
-            fieldLabel: 'Include States',
-            labelWidth: labelWidth,
-            width: width,
-            labelAlign: 'right',
-            columns: 1,
-            vertical: true,
-            items: stateOptions
         }, {
             xtype: 'tsfieldoptionscombobox',
             name: 'stackField',
@@ -327,6 +321,17 @@ Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
             allowNoEntry: true,
             noEntryText: '-- No Stacks --',
             noEntryValue: null
+        },{
+            xtype: 'checkboxgroup',
+            fieldLabel: 'Include States',
+            labelWidth: labelWidth,
+            width: width,
+            labelAlign: 'right',
+            columns: 2,
+            vertical: true,
+            margin: '15 0 15 0',
+            items: stateOptions
+
         },{
             xtype: 'rallycheckboxfield',
             fieldLabel: 'Include empty categories',
@@ -484,6 +489,11 @@ Ext.define("defects-by-field-chart", {
             }
         }
 
+        var rotation = 0;
+        if (this.allCategories && this.allCategories.length > 20){
+            rotation = 65;
+        }
+
         return {
             chart: {
                 type: 'column'
@@ -495,6 +505,11 @@ Ext.define("defects-by-field-chart", {
             yAxis: {
                 title: {
                     text: 'Count'
+                }
+            },
+            xAxis: {
+                labels: {
+                    rotation: rotation
                 }
             },
             legend: {

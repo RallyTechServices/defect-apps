@@ -116,6 +116,11 @@ Ext.define("defects-by-field-chart", {
             }
         }
 
+        var rotation = 0;
+        if (this.allCategories && this.allCategories.length > 20){
+            rotation = 65;
+        }
+
         return {
             chart: {
                 type: 'column'
@@ -127,6 +132,11 @@ Ext.define("defects-by-field-chart", {
             yAxis: {
                 title: {
                     text: 'Count'
+                }
+            },
+            xAxis: {
+                labels: {
+                    rotation: rotation
                 }
             },
             legend: {
