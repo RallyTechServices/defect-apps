@@ -4,11 +4,14 @@ Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
     getFields: function(settings, states){
 
         console.log('settings',settings);
+        var includeStates = settings && settings.includeStates || [];
+        if (Ext.isString(includeStates)){
+            includeStates = includeStates.split(',');
+        }
 
         var labelWidth = 200,
             stateOptions = _.map(states, function(s){
-            console.log('state', s,Ext.Array.contains(settings.includeStates, s));
-            var checked = Ext.Array.contains(settings.includeStates, s);
+            var checked = Ext.Array.contains(includeStates, s);
             return { boxLabel: s, name: 'includeStates', inputValue: s, checked: checked };
         });
 

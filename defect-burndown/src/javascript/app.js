@@ -8,7 +8,6 @@ Ext.define("DefectBurndown", {
         defaultSettings: {
             includeStates: ['Open', 'Submitted'],
             modelName: 'Defect',
-            includeSeverity: ['Critical','Major Problem'],
             alwaysFetch: ['FormattedID','ObjectID','State','Severity','CreationDate',"_PreviousValues.State",'_ValidFrom','_ValidTo', 'Requirement'],
             excludeUserStoryDefects: true,
             granularity: 'day',
@@ -58,6 +57,13 @@ Ext.define("DefectBurndown", {
             },
             scope: this
         });
+    },
+    onTimeboxScopeChange: function(timeboxScope){
+        this.logger.log('onTimeboxScopeChange', timeboxScope, this.getSetting('dateType'),timeboxScope.type === 'release',this.getSetting('dateType') === 'release');
+        if (timeboxScope && timeboxScope.type === 'release' && this.getSetting('dateType') === 'release'){
+            this.getContext().setTimeboxScope(timeboxScope);
+            this._buildChart();
+        }
     },
     _validateSettings: function(settings){
         this.logger.log('_validateSettings', settings);
@@ -157,7 +163,7 @@ Ext.define("DefectBurndown", {
             calculatorType: 'DefectBurndownCalculator',
             calculatorConfig: {
                 includeSeverity: includeSeverity,
-                includeStates: settings.includeStates,
+                includeStates: this._getActiveStates(),
                 startDate: startDate,
                 endDate: endDate,
                 granularity: settings.granularity,
@@ -282,15 +288,19 @@ Ext.define("DefectBurndown", {
     _showError: function(msg){
         Rally.ui.notify.Notifier.showError(msg);
     },
+    _getActiveStates: function(){
+        var activeStates = this.getSetting('includeStates');
+        if (Ext.isArray(activeStates)){
+            return activeStates;
+        }
+        return activeStates.split(',');
+    },
     _getStoreConfig: function(settings, startDate, endDate, query){
         var fetch = settings.alwaysFetch;
 
         startDate = Rally.util.DateTime.toIsoString(startDate);
         endDate = Rally.util.DateTime.toIsoString(endDate);
-        var includeStates = settings.includeStates;
-        if (Ext.isString(includeStates)){
-            includeStates = includeStates.split(',');
-        }
+        var includeStates = this._getActiveStates();
 
         var find = {
             _ProjectHierarchy: this.getContext().getProject().ObjectID,
