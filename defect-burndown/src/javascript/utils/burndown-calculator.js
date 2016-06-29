@@ -7,7 +7,9 @@ Ext.define('SnapsCalculator',{
             granularity = config.granularity,
             includeStates = config.includeStates,
             excludeUserStoryDefects = config.excludeUserStoryDefects,
-            includeSeverity = config.includeSeverity;
+            includeSeverity = config.includeSeverity,
+            includeField = config.includeField,
+            includeFieldValues = config.includeFieldValues || [];
 
         this.creationDate = Rally.util.DateTime.fromIsoString(snaps[currentSnapIndex].CreationDate);
         this.severity = snaps[currentSnapIndex].Severity;
@@ -28,6 +30,13 @@ Ext.define('SnapsCalculator',{
             var include = Ext.Array.contains(includeSeverity, this.severity);
             if (excludeUserStoryDefects && snaps[currentSnapIndex].Requirement){
                 include = false;
+            }
+            
+            if ( !Ext.isEmpty(includeField) && includeFieldValues.length > 0 ) {
+                if ( !Ext.Array.contains(includeFieldValues, snap[includeField]) ) {
+                    include = false;
+                }
+                
             }
 
             if (include) {
@@ -111,7 +120,22 @@ Ext.define("DefectBurndownCalculator",{
             day: 'm-d-Y',
             week: 'M d, Y',
             month: 'M Y'
-        }
+        },
+        
+        /*
+         * @cfg {String} includeField
+         * Set this to a field on the defects that the includeFieldValues array draws
+         * values from, then items will be limited to those that have one of the includeFieldValues
+         * array values
+         */
+        includeField: null,
+        /*
+         * @cfg [{String}] includeFieldValues
+         * An array of values that will be considered when the field is defined in includeField above
+         * 
+         * If the array is empty, then all values will be accepted
+         */
+        includeFieldValues: []
     },
 
     runCalculation: function (snapshots) {
@@ -131,7 +155,9 @@ Ext.define("DefectBurndownCalculator",{
                 dateBuckets: dateBuckets,
                 includeStates: includeStates,
                 includeSeverity: this.includeSeverity,
-                excludeUserStoryDefects: this.excludeUserStoryDefects
+                excludeUserStoryDefects: this.excludeUserStoryDefects,
+                includeField: this.includeField,
+                includeFieldValues: this.includeFieldValues
             }));
         }, this);
 

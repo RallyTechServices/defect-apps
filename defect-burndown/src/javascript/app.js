@@ -4,9 +4,11 @@ Ext.define("DefectBurndown", {
     logger: new Rally.technicalservices.Logger(),
     defaults: { margin: 10 },
 
+    
     config: {
         defaultSettings: {
             includeStates: ['Open', 'Submitted'],
+            filterField: 'State',
             modelName: 'Defect',
             alwaysFetch: ['FormattedID','ObjectID','State','Severity','CreationDate',"_PreviousValues.State",'_ValidFrom','_ValidTo', 'Requirement'],
             excludeUserStoryDefects: true,
@@ -102,11 +104,22 @@ Ext.define("DefectBurndown", {
                return { boxLabel: s || "None",  inputValue: s, checked: true };
             }),
             columns = Math.min(8, severityOptions.length);
-
         this.add({
             xtype: 'container',
             layout: 'hbox',
-            items: [{
+            items: [
+            {
+                xtype: 'rallyfieldvaluecombobox',
+                itemId: 'filterFieldValue',
+                model: 'Defect',
+                field: this.getSetting('filterField'),
+                multiSelect: true,
+                margin: 10,
+                //fieldLabel: 'Include ' + this.getSetting('filterField') + ':',
+                fieldLabel: 'Filter value(s):',
+                labelWidth: labelWidth
+               
+            },{
                 xtype: 'checkboxgroup',
                 fieldLabel: 'Include Severity',
                 labelAlign: 'right',
@@ -132,8 +145,21 @@ Ext.define("DefectBurndown", {
         this.down('#includeSeverity').on('change', function(cg){
             btn.setDisabled(false);
         }, this);
+        
+        this.down('rallyfieldvaluecombobox').on('blur', function(cg){
+            btn.setDisabled(false);
+        }, this);
 
-        this._buildChart();
+        // don't want to build the chart unless we know what the filter field knows
+        var filterFieldBox = this.down('rallyfieldvaluecombobox');
+        
+        if ( filterFieldBox.getStore().isLoading() ) {
+            this.down('rallyfieldvaluecombobox').on('readt', function(cg){
+                this._buildChart();
+            }, this);
+        } else {
+            this._buildChart(); 
+        }
     },
     _buildChart: function(btn){
         var settings = this.getSettings(),
@@ -155,6 +181,10 @@ Ext.define("DefectBurndown", {
         if (cg && cg.getValue){
             includeSeverity = _.values(cg.getValue());
         }
+        
+        var filterFieldValues = this.down('#filterFieldValue').getValue();
+        
+        console.log('--', filterFieldValues);
 
         this.add({
             xtype: 'rallychart',
@@ -164,6 +194,8 @@ Ext.define("DefectBurndown", {
             calculatorConfig: {
                 includeSeverity: includeSeverity,
                 includeStates: this._getActiveStates(),
+                includeField: this.getSetting('filterField'),
+                includeFieldValues: filterFieldValues,
                 startDate: startDate,
                 endDate: endDate,
                 granularity: settings.granularity,
@@ -310,12 +342,17 @@ Ext.define("DefectBurndown", {
             _ValidFrom: {$lte: endDate}
         };
 
+        var hydrate = ["State","Severity","_PreviousValues.State"];
+        if ( !Ext.isEmpty(this.getSetting('filterField') ) ) {
+            fetch.push(this.getSetting('filterField'));
+            hydrate.push( this.getSetting('filterField'));
+        }
 
-        this.logger.log('_getStoreConfig', fetch, find)
+        this.logger.log('_getStoreConfig', fetch, find, hydrate)
         return {
             fetch: fetch,
             find: find,
-            hydrate: ["State","Severity","_PreviousValues.State"],
+            hydrate: hydrate,
             limit: "Infinity",
             compress: true,
             removeUnauthorizedSnapshots: true,
