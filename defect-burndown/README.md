@@ -8,6 +8,8 @@ New defects is the count of defects that were created on that day.
 
 All defects are filtered by the selected Severities.  They are filtered by the severity value at the time of the latest snapshot when they were in an "Active State".   
 
+Defects are further filtered by the selected values on the field that is chosen as the filterField by the administrator in the App Settings...
+
  ![ScreenShot](/images/defect-burndown.png)
 
 ###App Configurations

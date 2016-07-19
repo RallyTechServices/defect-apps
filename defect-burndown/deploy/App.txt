@@ -3,14 +3,14 @@
 <head>
     <title>Defect Burndown</title>
     <!--  (c) 2015 Rally Software Development Corp.  All Rights Reserved. -->
-    <!--  Build Date: Thu Feb 25 2016 14:11:45 GMT-0700 (MST) -->
+    <!--  Build Date: Wed Jun 29 2016 14:41:52 GMT-0700 (PDT) -->
     
     <script type="text/javascript">
-        var APP_BUILD_DATE = "Thu Feb 25 2016 14:11:45 GMT-0700 (MST)";
-        var CHECKSUM = 23786711270;
+        var APP_BUILD_DATE = "Wed Jun 29 2016 14:41:52 GMT-0700 (PDT)";
+        var CHECKSUM = 29093523197;
     </script>
     
-    <script type="text/javascript" src="/apps/2.0/sdk.js"></script>
+    <script type="text/javascript" src="/apps/2.1/sdk.js"></script>
 
     <script type="text/javascript">
         Rally.onReady(function() {
@@ -185,7 +185,9 @@ Ext.define('SnapsCalculator',{
             granularity = config.granularity,
             includeStates = config.includeStates,
             excludeUserStoryDefects = config.excludeUserStoryDefects,
-            includeSeverity = config.includeSeverity;
+            includeSeverity = config.includeSeverity,
+            includeField = config.includeField,
+            includeFieldValues = config.includeFieldValues || [];
 
         this.creationDate = Rally.util.DateTime.fromIsoString(snaps[currentSnapIndex].CreationDate);
         this.severity = snaps[currentSnapIndex].Severity;
@@ -206,6 +208,13 @@ Ext.define('SnapsCalculator',{
             var include = Ext.Array.contains(includeSeverity, this.severity);
             if (excludeUserStoryDefects && snaps[currentSnapIndex].Requirement){
                 include = false;
+            }
+            
+            if ( !Ext.isEmpty(includeField) && includeFieldValues.length > 0 ) {
+                if ( !Ext.Array.contains(includeFieldValues, snap[includeField]) ) {
+                    include = false;
+                }
+                
             }
 
             if (include) {
@@ -289,7 +298,22 @@ Ext.define("DefectBurndownCalculator",{
             day: 'm-d-Y',
             week: 'M d, Y',
             month: 'M Y'
-        }
+        },
+        
+        /*
+         * @cfg {String} includeField
+         * Set this to a field on the defects that the includeFieldValues array draws
+         * values from, then items will be limited to those that have one of the includeFieldValues
+         * array values
+         */
+        includeField: null,
+        /*
+         * @cfg [{String}] includeFieldValues
+         * An array of values that will be considered when the field is defined in includeField above
+         * 
+         * If the array is empty, then all values will be accepted
+         */
+        includeFieldValues: []
     },
 
     runCalculation: function (snapshots) {
@@ -309,7 +333,9 @@ Ext.define("DefectBurndownCalculator",{
                 dateBuckets: dateBuckets,
                 includeStates: includeStates,
                 includeSeverity: this.includeSeverity,
-                excludeUserStoryDefects: this.excludeUserStoryDefects
+                excludeUserStoryDefects: this.excludeUserStoryDefects,
+                includeField: this.includeField,
+                includeFieldValues: this.includeFieldValues
             }));
         }, this);
 
@@ -388,6 +414,32 @@ Ext.define("DefectBurndownCalculator",{
 Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
     singleton: true,
 
+    filterOutExceptChoices: function(store) {
+
+        store.filter([{
+            filterFn:function(field){ 
+                
+                var attribute_definition = field.get('fieldDefinition').attributeDefinition;
+                var attribute_type = null;
+                if ( attribute_definition ) {
+                    attribute_type = attribute_definition.AttributeType;
+                }
+                if (  attribute_type == "BOOLEAN" ) {
+                    return true;
+                }
+                if ( attribute_type == "STRING" || attribute_type == "STATE" ) {
+                    if ( field.get('fieldDefinition').attributeDefinition.Constrained ) {
+                        return true;
+                    }
+                }
+                if ( field.get('name') === 'State' ) { 
+                    return true;
+                }
+                return false;
+            } 
+        }]);
+    },
+    
     getFields: function(settings, states){
 
         console.log('settings',settings);
@@ -413,6 +465,19 @@ Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
 
 
         return [{
+                name: 'filterField',
+                xtype:'rallyfieldcombobox',
+                model:'Defect',
+                labelAlign: 'right',
+                labelWidth: labelWidth,
+                listeners: {
+                    ready: function(field_box) {
+                        Rally.technicalservices.DefectsByFieldSettings.filterOutExceptChoices(field_box.getStore());
+                    }
+                },
+                readyEvent: 'ready'
+            },
+            {
             xtype: 'combobox',
             fieldLabel: 'Granularity',
             labelAlign: 'right',
@@ -420,7 +485,7 @@ Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
             name: 'granularity',
             store: granularityStore,
             displayField: 'name',
-            valueField: 'value',
+            valueField: 'value'
         },{
             xtype: 'checkboxgroup',
             fieldLabel: 'Active States',
@@ -456,6 +521,7 @@ Ext.define('Rally.technicalservices.DefectsByFieldSettings',{
                 }
             },
             items: [
+            
                 {
                     name: "dateType",
                     itemId: "release",
@@ -693,9 +759,11 @@ Ext.define("DefectBurndown", {
     logger: new Rally.technicalservices.Logger(),
     defaults: { margin: 10 },
 
+    
     config: {
         defaultSettings: {
             includeStates: ['Open', 'Submitted'],
+            filterField: 'State',
             modelName: 'Defect',
             alwaysFetch: ['FormattedID','ObjectID','State','Severity','CreationDate',"_PreviousValues.State",'_ValidFrom','_ValidTo', 'Requirement'],
             excludeUserStoryDefects: true,
@@ -791,11 +859,22 @@ Ext.define("DefectBurndown", {
                return { boxLabel: s || "None",  inputValue: s, checked: true };
             }),
             columns = Math.min(8, severityOptions.length);
-
         this.add({
             xtype: 'container',
             layout: 'hbox',
-            items: [{
+            items: [
+            {
+                xtype: 'rallyfieldvaluecombobox',
+                itemId: 'filterFieldValue',
+                model: 'Defect',
+                field: this.getSetting('filterField'),
+                multiSelect: true,
+                margin: 10,
+                //fieldLabel: 'Include ' + this.getSetting('filterField') + ':',
+                fieldLabel: 'Filter value(s):',
+                labelWidth: labelWidth
+               
+            },{
                 xtype: 'checkboxgroup',
                 fieldLabel: 'Include Severity',
                 labelAlign: 'right',
@@ -821,8 +900,21 @@ Ext.define("DefectBurndown", {
         this.down('#includeSeverity').on('change', function(cg){
             btn.setDisabled(false);
         }, this);
+        
+        this.down('rallyfieldvaluecombobox').on('blur', function(cg){
+            btn.setDisabled(false);
+        }, this);
 
-        this._buildChart();
+        // don't want to build the chart unless we know what the filter field knows
+        var filterFieldBox = this.down('rallyfieldvaluecombobox');
+        
+        if ( filterFieldBox.getStore().isLoading() ) {
+            this.down('rallyfieldvaluecombobox').on('readt', function(cg){
+                this._buildChart();
+            }, this);
+        } else {
+            this._buildChart(); 
+        }
     },
     _buildChart: function(btn){
         var settings = this.getSettings(),
@@ -844,6 +936,10 @@ Ext.define("DefectBurndown", {
         if (cg && cg.getValue){
             includeSeverity = _.values(cg.getValue());
         }
+        
+        var filterFieldValues = this.down('#filterFieldValue').getValue();
+        
+        console.log('--', filterFieldValues);
 
         this.add({
             xtype: 'rallychart',
@@ -853,6 +949,8 @@ Ext.define("DefectBurndown", {
             calculatorConfig: {
                 includeSeverity: includeSeverity,
                 includeStates: this._getActiveStates(),
+                includeField: this.getSetting('filterField'),
+                includeFieldValues: filterFieldValues,
                 startDate: startDate,
                 endDate: endDate,
                 granularity: settings.granularity,
@@ -999,12 +1097,17 @@ Ext.define("DefectBurndown", {
             _ValidFrom: {$lte: endDate}
         };
 
+        var hydrate = ["State","Severity","_PreviousValues.State"];
+        if ( !Ext.isEmpty(this.getSetting('filterField') ) ) {
+            fetch.push(this.getSetting('filterField'));
+            hydrate.push( this.getSetting('filterField'));
+        }
 
-        this.logger.log('_getStoreConfig', fetch, find)
+        this.logger.log('_getStoreConfig', fetch, find, hydrate)
         return {
             fetch: fetch,
             find: find,
-            hydrate: ["State","Severity","_PreviousValues.State"],
+            hydrate: hydrate,
             limit: "Infinity",
             compress: true,
             removeUnauthorizedSnapshots: true,
