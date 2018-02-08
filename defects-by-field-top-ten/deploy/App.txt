@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CATS-Defects By Field Top Ten-0.1</title>
+    <!--  (c) 2017 CA Technologies.  All Rights Reserved. -->
+    <!--  Build Date: Wed Feb 07 2018 17:16:59 GMT-0800 (PST) -->
+
+    <script type="text/javascript">
+        var APP_BUILD_DATE = "Wed Feb 07 2018 17:16:59 GMT-0800 (PST)";
+        var ARTIFACT = "US2163";
+        var BUILDER  = "rajan08";
+        var CHECKSUM = 16587372665;
+    </script>
+
+    <script type="text/javascript" src="/apps/2.1/sdk.js"></script>
+    <!-- our highcharts (needed so that we can add patterns)
+    <script type="text/javascript" src="/apps/2.1/lib/analytics/analytics-all.js"></script>
+    -->
+
+
+    <script type="text/javascript">
+        Rally.onReady(function() {
+             
+/**
+ * A link that pops up a version dialog box
+ */
+
+Ext.define('Rally.technicalservices.InfoLink',{
+    extend: 'Rally.ui.dialog.Dialog',
+    alias: 'widget.tsinfolink',
+
+    /**
+     * @cfg {String} informationHtml
+     * Additional text to be displayed on the popup dialog (for exmaple,
+     * to add a description of the app's use or functionality)
+     */
+    informationHtml: null,
+
+    /**
+     *
+     * cfg {String} title
+     * The title for the dialog box
+     */
+    title: "Build Information",
+
+    defaults: { padding: 5, margin: 5 },
+
+    closable: true,
+
+    draggable: true,
+
+    autoShow: true,
+
+    width: 350,
+
+    informationalConfig: null,
+
+    showLog: false,
+    logger: null,
+
+    items: [
+        {xtype:'container', itemId:'information' },
+        {xtype:'container', itemId:'button_box'}
+    ],
+
+    initComponent: function() {
+        var id = Ext.id(this);
+        this.title =  "<span class='icon-help'> </span>" + this.title;
+        this.callParent(arguments);
+    },
+
+    _generateChecksum: function(string){
+        var chk = 0x12345678,
+            i;
+        string = string.replace(/var CHECKSUM = .*;/,"");
+        string = string.replace(/var BUILDER  = .*;/,"");
+        string = string.replace(/\s/g,"");  //Remove all whitespace from the string.
+
+        for (i = 0; i < string.length; i++) {
+            chk += (string.charCodeAt(i) * i);
+        }
+
+        return chk;
+    },
+
+    _checkChecksum: function(container) {
+        var deferred = Ext.create('Deft.Deferred');
+        var me = this;
+
+        Ext.Ajax.request({
+            url: document.URL,
+            params: {
+                id: 1
+            },
+            success: function (response) {
+                text = response.responseText;
+                if ( CHECKSUM ) {
+                    var stored_checksum = me._generateChecksum(text);
+                    if ( CHECKSUM !== stored_checksum ) {
+                        deferred.resolve(false);
+                        return;
+                    }
+                }
+                deferred.resolve(true);
+            }
+        });
+
+        return deferred.promise;
+    },
+
+    _addToContainer: function(container){
+        var config = Ext.apply({
+            xtype:'container',
+            height: 200,
+            overflowY: true
+        }, this.informationalConfig);
+
+        container.add(config);
+    },
+
+    afterRender: function() {
+        var app = Rally.getApp();
+
+        if ( !Ext.isEmpty( this.informationalConfig ) ) {
+            var container = this.down('#information');
+            this._addToContainer(container);
+        }
+
+        if ( this.showLog && this.logger ) {
+            this.down('#button_box').add({
+                xtype:'rallybutton',
+                text:'Show Log',
+                listeners: {
+                    scope: this,
+                    click: function() {
+                        this.logger.displayLog();
+                    }
+                }
+            });
+        }
+
+        if (! app.isExternal() ) {
+            this._checkChecksum(app).then({
+                scope: this,
+                success: function(result){
+                    if ( !result ) {
+                        this.addDocked({
+                            xtype:'container',
+                            cls: 'build-info',
+                            dock: 'bottom',
+                            padding: 2,
+                            html:'<span class="icon-warning"> </span>Checksums do not match'
+                        });
+                    }
+                },
+                failure: function(msg){
+                    console.log("oops:",msg);
+                }
+            });
+        } else {
+            this.addDocked({
+                xtype:'container',
+                cls: 'build-info',
+                padding: 2,
+                dock: 'bottom',
+                html:'... Running externally'
+            });
+        }
+        this.callParent(arguments);
+    },
+
+    beforeRender: function() {
+        var me = this;
+        this.callParent(arguments);
+
+        if (this.informationHtml) {
+            this.addDocked({
+                xtype: 'component',
+                componentCls: 'intro-panel',
+                padding: 2,
+                html: this.informationHtml,
+                dock: 'bottom'
+            });
+        }
+
+        this.addDocked({
+            xtype:'container',
+            cls: 'build-info',
+            padding: 2,
+            dock:'bottom',
+            html:"This app was created by the CA AC Technical Services Team."
+        });
+
+        if ( APP_BUILD_DATE ) {
+            var build_html = Ext.String.format("Built on: {0} <br/>Built by: {1}",
+                APP_BUILD_DATE,
+                BUILDER);
+
+            if ( ARTIFACT ) {
+                build_html = build_html + "<br/>Source artifact: " + ARTIFACT;
+            }
+
+            this.addDocked({
+                xtype:'container',
+                cls: 'build-info',
+                padding: 2,
+                dock: 'top',
+                html: build_html
+            });
+        }
+    }
+});
+
+/*
+ * originally written for when we supported older versions of IE that wouldn't
+ * deal with console.log.
+ *
+ * Now allows for saving log.
+ */
+Ext.define('CArABU.technicalservices.Logger',{
+
+    saveForLater: false,
+    saveLines: 100,
+    logArray: [],
+
+    constructor: function(config){
+        Ext.apply(this,config);
+    },
+
+    setSaveForLater: function(saveme){
+        this.saveForLater = saveme;
+    },
+
+    log: function(args){
+        var timestamp = "[ " + Ext.util.Format.date(new Date(), "Y-m-d H:i:s.u") + " ]";
+
+        var output_args = [];
+        output_args = Ext.Array.push(output_args,[timestamp]);
+        output_args = Ext.Array.push(output_args, Ext.Array.slice(arguments,0));
+
+        if ( this.saveForLater ) {
+            if ( !this.logArray) {
+                this.logArray = [];
+            }
+            this.logArray.push(output_args.join(' '));
+
+            if ( this.logArray.length > this.saveLines ) {
+                this.logArray.shift();
+            }
+        }
+
+        window.console && console.log.apply(console,output_args);
+    },
+
+    getLogText: function() {
+        if ( ! this.logArray || this.logArray.length === 0 ) { return "-- no log --"; }
+        return this.logArray.join('<br/>');
+    } ,
+
+    displayLog: function() {
+        var text = this.getLogText();
+
+        this.popup = Ext.create('Rally.ui.dialog.Dialog', {
+            width      : Ext.getBody().getWidth() - 20,
+            height     : Ext.getBody().getHeight() - 20,
+            closable   : true,
+            title      : 'Log',
+            autoShow   : true,
+            layout     : 'border',
+            defaults   : {
+                layout : 'fit',
+                width  : '50%',
+                border : false
+            },
+            items: [{
+                region : 'center',
+                xtype: 'container',
+                html: text,
+                autoScroll: true
+            }]
+        });
+    }
+});
+
+Ext.define('TSUtilities', {
+
+    singleton: true,
+
+    loadWsapiRecords: function(config){
+        var deferred = Ext.create('Deft.Deferred');
+        var default_config = {
+            model: 'Defect',
+            fetch: ['ObjectID']
+        };
+        Ext.create('Rally.data.wsapi.Store', Ext.Object.merge(default_config,config)).load({
+            callback : function(records, operation, successful) {
+                if (successful){
+                    deferred.resolve(records);
+                } else {
+                    console.error("Failed: ", operation);
+                    deferred.reject('Problem loading: ' + operation.error.errors.join('. '));
+                }
+            }
+        });
+        return deferred.promise;
+    },
+
+    loadAStoreWithAPromise: function(model_name, model_fields){
+        var deferred = Ext.create('Deft.Deferred');
+
+        Ext.create('Rally.data.wsapi.Store', {
+            model: model_name,
+            fetch: model_fields
+        }).load({
+            callback : function(records, operation, successful) {
+                if (successful){
+                    deferred.resolve(this);
+                } else {
+                    console.error("Failed: ", operation);
+                    deferred.reject('Problem loading: ' + operation.error.errors.join('. '));
+                }
+            }
+        });
+        return deferred.promise;
+    }
+});
+
+Ext.define('Rally.ui.combobox.FieldOptionsCombobox', {
+    requires: [],
+    extend: 'Rally.ui.combobox.FieldComboBox',
+    alias: 'widget.tsfieldoptionscombobox',
+
+    _isNotHidden: function(field) {
+        if (field && field.attributeDefinition ){
+            return field.attributeDefinition.Constrained && field.attributeDefinition.AttributeType != 'COLLECTION';
+        }
+        return false;
+    },
+    _populateStore: function() {
+        if (!this.store) {
+            return;
+        }
+        var data = _.sortBy(
+            _.map(
+                _.filter(this.model.getFields(), this._isNotHidden),
+                this._convertFieldToLabelValuePair,
+                this
+            ),
+            'name'
+        );
+
+        if (this.allowNoEntry){
+            data.unshift({name: this.noEntryText, value: null});
+        }
+        this.store.loadRawData(data);
+        this.setDefaultValue();
+        this.onReady();
+    },
+    setValue: function(value, doSelect) {
+        var me = this,
+            valueNotFoundText = me.valueNotFoundText,
+            inputEl = me.inputEl,
+            i, len, record,
+            dataObj,
+            matchedRecords = [],
+            displayTplData = [],
+            processedValue = [];
+
+        if (me.store.loading) {
+            // Called while the Store is loading. Ensure it is processed by the onLoad method.
+            me.value = value;
+            me.setHiddenValue(me.value);
+            return me;
+        }
+
+        // This method processes multi-values, so ensure value is an array.
+        value = Ext.Array.from(value);
+
+        // Loop through values, matching each from the Store, and collecting matched records
+        for (i = 0, len = value.length; i < len; i++) {
+            record = value[i];
+            if (!record || !record.isModel) {
+                record = me.findRecordByValue(record);
+            }
+            // record found, select it.
+            if (record) {
+                matchedRecords.push(record);
+                displayTplData.push(record.data);
+                processedValue.push(record.get(me.valueField));
+            }
+            // record was not found, this could happen because
+            // store is not loaded or they set a value not in the store
+            else {
+                // If we are allowing insertion of values not represented in the Store, then push the value and
+                // create a fake record data object to push as a display value for use by the displayTpl
+                if (!me.forceSelection) {
+                    processedValue.push(value[i]);
+                    dataObj = {};
+                    dataObj[me.displayField] = value[i];
+                    displayTplData.push(dataObj);
+                    // TODO: Add config to create new records on selection of a value that has no match in the Store
+                }
+                // Else, if valueNotFoundText is defined, display it, otherwise display nothing for this value
+                else if (Ext.isDefined(valueNotFoundText)) {
+                    displayTplData.push(valueNotFoundText);
+                }
+            }
+        }
+
+        // Set the value of this field. If we are multiselecting, then that is an array.
+        me.setHiddenValue(processedValue);
+        me.value = me.multiSelect ? processedValue : processedValue[0];
+        if (!Ext.isDefined(me.value)) {
+            me.value = null;
+        }
+        me.displayTplData = displayTplData; //store for getDisplayValue method
+        me.lastSelection = me.valueModels = matchedRecords;
+
+        if (inputEl && me.emptyText && !Ext.isEmpty(value)) {
+            inputEl.removeCls(me.emptyCls);
+        }
+
+        // Calculate raw value from the collection of Model data
+        me.setRawValue(me.getDisplayValue());
+        me.checkChange();
+
+        if (doSelect !== false) {
+            me.syncSelection();
+        }
+        me.applyEmptyText();
+
+        return me;
+    },
+});
+Ext.define('CArABU.app.DefectsByFieldSettings',{
+    singleton: true,
+
+    getFields: function(settings, states){
+        var labelWidth = 150,
+            width = 400;
+
+        var allowedStates = settings && settings.allowedStates;
+        if (allowedStates && Ext.isString(allowedStates)){
+            allowedStates = allowedStates.split(',');
+        }
+
+        var stateOptions = _.map(states, function(s){
+            var checked = Ext.Array.contains(allowedStates, s);
+            return { boxLabel: s, name: 'allowedStates', inputValue: s, checked: checked };
+        });
+
+
+        return [
+                // {
+        //     name: 'saveLog',
+        //     xtype: 'rallycheckboxfield',
+        //     boxLabelAlign: 'after',
+        //     fieldLabel: '',
+        //     margin: check_box_margins,
+        //     boxLabel: 'Save Logging<br/><span style="color:#999999;"><i>Save last 100 lines of log for debugging.</i></span>'
+
+        // },
+        {
+            xtype: 'tsfieldoptionscombobox',
+            name: 'bucketField',
+            fieldLabel: 'Bucket by',
+            labelWidth: labelWidth,
+            labelAlign: 'right',
+            width: width,
+            model: settings.modelName,
+            allowNoEntry: false
+        }
+        ,{
+            xtype: 'rallycheckboxfield',
+            fieldLabel: 'Show top Ten',
+            labelWidth: labelWidth,
+            width: width,
+            labelAlign: 'right',
+            name: 'showTopTen'
+        }
+        //,
+        // {
+        //     xtype: 'tsfieldoptionscombobox',
+        //     name: 'stackField',
+        //     fieldLabel: 'Stacks',
+        //     model: settings.modelName,
+        //     labelWidth: labelWidth,
+        //     width: width,
+        //     labelAlign: 'right',
+        //     allowNoEntry: true,
+        //     noEntryText: '-- No Stacks --',
+        //     noEntryValue: null
+        // }
+        // ,
+        // {
+        //     xtype: 'checkboxgroup',
+        //     fieldLabel: 'Include States',
+        //     labelWidth: labelWidth,
+        //     width: width,
+        //     labelAlign: 'right',
+        //     columns: 2,
+        //     vertical: true,
+        //     margin: '15 0 15 0',
+        //     items: stateOptions
+
+        // }
+        // ,{
+        //     xtype: 'rallycheckboxfield',
+        //     fieldLabel: 'Include empty categories',
+        //     labelWidth: labelWidth,
+        //     width: width,
+        //     labelAlign: 'right',
+        //     name: 'showNoDataCategories'
+        // }
+        // ,{
+        //     xtype: 'textarea',
+        //     fieldLabel: 'Query',
+        //     name: 'query',
+        //     anchor: '100%',
+        //     cls: 'query-field',
+        //     labelAlign: 'right',
+        //     labelWidth: labelWidth,
+        //     margin: '0 70 0 0',
+        //     plugins: [
+        //         {
+        //             ptype: 'rallyhelpfield',
+        //             helpId: 194
+        //         },
+        //         'rallyfieldvalidationui'
+        //     ],
+        //     validateOnBlur: false,
+        //     validateOnChange: false,
+        //     validator: function(value) {
+        //         try {
+        //             if (value) {
+        //                 Rally.data.wsapi.Filter.fromQueryString(value);
+        //             }
+        //             return true;
+        //         } catch (e) {
+        //             return e.message;
+        //         }
+        //     }
+        // }
+        ];
+    }
+});
+
+Ext.define("CArABU.app.TSApp", {
+    extend: 'Rally.app.App',
+    componentCls: 'app',
+    logger: new CArABU.technicalservices.Logger(),
+    defaults: { margin: 10 },
+
+
+    items: [
+        {xtype:'container',itemId:'selector_box',layout:{type:'hbox'}, margin: '10 10 50 10' },
+        {xtype:'container',itemId:'display_box', margin: '50 10 10 10' }
+    ],
+
+    config: {
+        defaultSettings: {
+            stackField: null,
+            bucketField: 'Project',
+            allowedStates: ['Open'],
+            modelName: 'Defect',
+            alwaysFetch: ['FormattedID','ObjectID','State'],
+            noEntryText: '(No Entry)',
+            query: '',
+            showNoDataCategories: false,
+            showTopTen: true
+        }
+    },
+
+    integrationHeaders : {
+        name : "defects-by-field-chart"
+    },
+                        
+    launch: function() {
+        this._fetchAllowedValues('Defect', 'State').then({
+            success: function(values){
+                this.states = values;
+                this._addSelector();
+            },
+            failure: function(msg){
+                Rally.ui.notify.Notifier.showError({ message: msg });
+            },
+            scope: this
+        });
+        //this._updateDisplay();
+    },
+
+    _addSelector: function(){
+        var me = this;
+       
+        me.down('#selector_box').add([
+            {
+                xtype: 'rallyreleasecombobox',
+                name: 'releaseCombo',
+                itemId: 'releaseCombo',
+                stateful: true,
+                stateId: me.getContext().getScopedStateId('releaseCombo'),   
+                fieldLabel: 'Select Release:',
+                multiSelect: true,
+                margin: '10 10 10 10', 
+                width: 450,
+                labelWidth: 100,
+                cls: 'rally-checkbox-combobox',
+                showArrows: false,
+                valueField:'Name',
+                displayField: 'Name'
+                ,
+                listConfig: {
+                    cls: 'rally-checkbox-boundlist',
+                    itemTpl: Ext.create('Ext.XTemplate',
+                        '<div class="rally-checkbox-image"></div>',
+                        '{[this.getDisplay(values)]}</div>',
+                        {
+                            getDisplay: function(values){
+                                return values.Name;
+                            }
+                        }
+                    )
+                }
+            },
+            {
+                xtype:'rallybutton',
+                name: 'updateButton',
+                itemId: 'updateButton',
+                margin: '10 10 10 10',
+                text: 'Update',
+                listeners: {
+                    click: me._updateDisplay,
+                    scope: me
+                }
+            }
+        ]);
+    },
+
+
+    _updateDisplay: function(){
+        var me = this;
+        me.down('#display_box').removeAll();
+
+        if (!this._validateSettings(this.getSettings())){
+            return;
+        }
+        this._fetchAllowedValues(this.getSettings().modelName, this.getSettings().bucketField).then({
+            success: function(values){
+                this.allCategories = values;
+                this._fetchData(this._getStoreConfig(this.getSettings())).then({
+                    success: this._buildChart,
+                    failure: this._showError,
+                    scope: this
+                });
+            },
+            failure: function(msg){
+                Rally.ui.notify.Notifier.showError({message: msg});
+            },
+            scope: this
+        });
+    },
+    _fetchAllowedValues: function(modelName, fieldName){
+        var deferred = Ext.create('Deft.Deferred');
+        Rally.data.ModelFactory.getModel({
+            type: modelName,
+            success: function(model) {
+                model.getField(fieldName).getAllowedValueStore().load({
+                    callback: function(records, operation, success) {
+                        this.logger.log('_fetchAllowedValues', records, operation);
+                        if (success){
+                            var vals = _.map(records, function(r){ return r.get('StringValue'); });
+                            deferred.resolve(vals);
+                        } else {
+                            deferred.reject("Error fetching category data");
+                        }
+                    },
+                    scope: this
+                });
+            },
+            scope: this
+        });
+        return deferred;
+    },
+
+    _buildChart: function(records){
+        this.logger.log('_buildChart', records);
+        var settings = this.getSettings();
+        if (!records || records.length === 0){
+            this.add({
+                xtype: 'container',
+                html: 'No records found for the configured settings.'
+            });
+            return;
+        }
+        this.down('#display_box').add({
+            xtype: 'rallychart',
+            loadMask: false,
+            chartConfig: this._getChartConfig(records),
+            chartData: this._getChartData(records)
+        });
+
+    },
+    _getAllowedStates: function(){
+        var settings = this.getSettings();
+        if (Ext.isString(settings.allowedStates)){
+            return settings.allowedStates.split(',');
+        }
+        return settings.allowedStates;
+    },
+    _getChartConfig: function(records){
+        var field = "Field",
+            settings = this.getSettings(),
+            stackField = null;
+        console.log(records);
+        if (records && records.length > 0){
+            field = records[0].getField(settings.bucketField).displayName;
+            if (settings.stackField && settings.stackField.length > 0){
+                stackField = records[0].getField(settings.stackField).displayName;
+            }
+        }
+
+        var rotation = 0;
+        if (this.allCategories && this.allCategories.length > 20){
+            rotation = 65;
+        }
+
+        return {
+            chart: {
+                type: 'column'
+            },
+            title: {
+                text: 'Defects by ' + field
+
+            },
+            yAxis: {
+                title: {
+                    text: 'Count'
+                }
+            },
+            xAxis: {
+                labels: {
+                    rotation: rotation
+                }
+            },
+            legend: {
+                title: { text: stackField},
+                enabled: settings.stackField && settings.stackField.length > 0,
+                layout: 'vertical',
+                align: 'right',
+                verticalAlign: 'top'
+            },
+            plotOptions: {
+                column: {
+                    stacking: 'normal'
+                }
+
+            }
+        };
+    },
+    _getChartData: function(records){
+        var me = this;
+        var hash = {},
+            settings=  this.getSettings(),
+            noEntryText = settings.noEntryText,
+            stacks = [];
+
+        Ext.Array.each(records, function(r){
+            var bucket = r.get(settings.bucketField) || noEntryText,
+                stack = "Total";
+
+            if (Ext.isObject(bucket)){
+                bucket = bucket._refObjectName;
+            }
+
+            if (settings.stackField){
+                stack = r.get(settings.stackField) || noEntryText;
+            }
+
+            if (Ext.isObject(stack)){
+                stack = stack._refObjectName;
+            }
+
+            if (!hash[bucket]){
+                hash[bucket] = {};
+            }
+            if (!hash[bucket][stack]){
+                if (!Ext.Array.contains(stacks, stack)){
+                    stacks.push(stack);
+                }
+                hash[bucket][stack] = 0;
+            }
+            hash[bucket][stack]++;
+        });
+
+        if(settings.showTopTen === 'true' || settings.showTopTen === true){
+            var x = me._sortProperties(hash, 'Total', true, true);
+            var hash_again = {}
+            var length = x.length < 10 ? x.length : 10;
+            for (i = 0; i < length ; i++) { 
+                hash_again[x[i][0]] = x[i][1]
+            }
+            console.log('hash>>',hash);
+            console.log('hash1>>',hash_again);
+
+            hash = hash_again;            
+        }
+
+
+
+        var series = [],
+            categories = _.keys(hash);
+
+        if (settings.showNoDataCategories === 'true' || settings.showNoDataCategories === true){
+            categories = this.allCategories || categories;
+        }
+
+        _.each(stacks, function(stack){
+            var obj = { name: stack, data: [] }
+            _.each(categories, function(bucket){
+                var val = hash[bucket] && hash[bucket][stack] || 0;
+                obj.data.push(val);
+            });
+            series.push(obj);
+        });
+        console.log('series>>',series);
+        return {
+            series: series,
+            categories: categories
+        };
+    },
+    _showError: function(msg){
+        Rally.ui.notify.Notifier.showError(msg);
+    },
+    _getStoreConfig: function(settings){
+        var fetch = settings.alwaysFetch.concat([settings.bucketField]);
+        // if (settings.stackField){
+        //     fetch.push(settings.stackField);
+        // }
+
+        // var filters = _.map(this._getAllowedStates(), function(state){ return {property: 'State', value: state}; });
+        // filters = Rally.data.wsapi.Filter.or(filters);
+
+        // if (settings.query && settings.query.length > 0){
+        //     var queryFilter = Rally.data.wsapi.Filter.fromQueryString(settings.query);
+        //     this.logger.log('_getStoreConfig -> query filter:', queryFilter.toString(), 'allowed state filter:', filters.toString());
+        //     filters = filters.and(queryFilter);
+        // }
+
+        var config = {
+            model: settings.modelName,
+            fetch: fetch,
+            limit: 'Infinity'
+        };
+
+        var r_filters = [];
+        Ext.Array.each(this.down('#releaseCombo').value, function(rel){
+            r_filters.push({
+                property: 'Release.Name',
+                value: rel
+            })
+        });
+        if(r_filters.length > 0){
+            r_filters = Rally.data.wsapi.Filter.or(r_filters)
+            config['filters'] = r_filters;            
+        }
+
+        this.logger.log('_getStoreConfig', r_filters && r_filters.toString(), fetch);
+
+        return config;
+    },
+    _validateSettings: function(settings){
+
+        if (this._getAllowedStates().length > 0){
+            return true;
+        }
+        this.add({
+            xtype: 'container',
+            html: 'Please use the app settings to configure at least one Allowed State for the data set.'
+        });
+
+    },
+    _fetchData: function(config){
+        var deferred = Ext.create('Deft.Deferred'),
+            me = this;
+
+        this.setLoading(true);
+        Ext.create('Rally.data.wsapi.Store',config).load({
+            callback: function(records, operation){
+                me.setLoading(false);
+                me.logger.log('_fetchData', operation, records);
+                if (operation.wasSuccessful()){
+                    deferred.resolve(records);
+                } else {
+                    deferred.reject(operation.error.errors.join(','));
+                }
+            }
+        });
+
+        return deferred;
+    },
+    getSettingsFields: function(){
+        return CArABU.app.DefectsByFieldSettings.getFields(this.getSettings(), this.states);
+    },
+
+    // getSettingsFields: function() {
+    //     var check_box_margins = '5 0 5 0';
+    //     return [{
+    //         name: 'saveLog',
+    //         xtype: 'rallycheckboxfield',
+    //         boxLabelAlign: 'after',
+    //         fieldLabel: '',
+    //         margin: check_box_margins,
+    //         boxLabel: 'Save Logging<br/><span style="color:#999999;"><i>Save last 100 lines of log for debugging.</i></span>'
+
+    //     }];
+    // },
+
+    getOptions: function() {
+        var options = [
+            {
+                text: 'About...',
+                handler: this._launchInfo,
+                scope: this
+            }
+        ];
+
+        return options;
+    },
+
+    _launchInfo: function() {
+        if ( this.about_dialog ) { this.about_dialog.destroy(); }
+
+        this.about_dialog = Ext.create('Rally.technicalservices.InfoLink',{
+            showLog: this.getSetting('saveLog'),
+            logger: this.logger
+        });
+    },
+
+    isExternal: function(){
+        return typeof(this.getAppId()) == 'undefined';
+    },
+
+    _sortProperties: function(obj, sortedBy, isNumericSort, reverse) {
+            sortedBy = sortedBy || 1; // by default first key
+            isNumericSort = isNumericSort || false; // by default text sort
+            reverse = reverse || false; // by default no reverse
+
+            var reversed = (reverse) ? -1 : 1;
+
+            var sortable = [];
+            for (var key in obj) {
+                if (obj.hasOwnProperty(key)) {
+                    sortable.push([key, obj[key]]);
+                }
+            }
+            if (isNumericSort)
+                sortable.sort(function (a, b) {
+                    return reversed * (a[1][sortedBy] - b[1][sortedBy]);
+                });
+            else
+                sortable.sort(function (a, b) {
+                    var x = a[1][sortedBy].toLowerCase(),
+                        y = b[1][sortedBy].toLowerCase();
+                    return x < y ? reversed * -1 : x > y ? reversed : 0;
+                });
+            return sortable; 
+        }
+
+});
+
+
+               Rally.launchApp('CArABU.app.TSApp', {
+                   name: 'Defects By Field Top Ten'
+               });
+        });
+    </script>
+
+    <style type="text/css">
+
+.app {
+}
+.tsinfolink {
+    position:absolute;
+    right:0px;
+    width: 14px;
+    height: 14px;
+    border-radius: 7px;
+    text-align: center;
+    color: white;
+    background: #C0C0C0;
+    border-style: solid;
+    border-width: 1px;
+    margin-top: 25px;
+    margin-right: 5px;
+    cursor: pointer;
+}
+    </style>
+
+</head>
+<body></body>
+</html>
