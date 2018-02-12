@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CATS-defect-trend-by-release-0.1</title>
+    <!--  (c) 2017 CA Technologies.  All Rights Reserved. -->
+    <!--  Build Date: Sun Feb 11 2018 21:00:44 GMT-0800 (PST) -->
+
+    <script type="text/javascript">
+        var APP_BUILD_DATE = "Sun Feb 11 2018 21:00:44 GMT-0800 (PST)";
+        var ARTIFACT = "US2022";
+        var BUILDER  = "rajan08";
+        var CHECKSUM = 8960327271;
+    </script>
+
+    <script type="text/javascript" src="/apps/2.1/sdk.js"></script>
+    <!-- our highcharts (needed so that we can add patterns)
+    <script type="text/javascript" src="/apps/2.1/lib/analytics/analytics-all.js"></script>
+    -->
+
+
+    <script type="text/javascript">
+        Rally.onReady(function() {
+             
+/**
+ * A link that pops up a version dialog box
+ */
+
+Ext.define('Rally.technicalservices.InfoLink',{
+    extend: 'Rally.ui.dialog.Dialog',
+    alias: 'widget.tsinfolink',
+
+    /**
+     * @cfg {String} informationHtml
+     * Additional text to be displayed on the popup dialog (for exmaple,
+     * to add a description of the app's use or functionality)
+     */
+    informationHtml: null,
+
+    /**
+     *
+     * cfg {String} title
+     * The title for the dialog box
+     */
+    title: "Build Information",
+
+    defaults: { padding: 5, margin: 5 },
+
+    closable: true,
+
+    draggable: true,
+
+    autoShow: true,
+
+    width: 350,
+
+    informationalConfig: null,
+
+    showLog: false,
+    logger: null,
+
+    items: [
+        {xtype:'container', itemId:'information' },
+        {xtype:'container', itemId:'button_box'}
+    ],
+
+    initComponent: function() {
+        var id = Ext.id(this);
+        this.title =  "<span class='icon-help'> </span>" + this.title;
+        this.callParent(arguments);
+    },
+
+    _generateChecksum: function(string){
+        var chk = 0x12345678,
+            i;
+        string = string.replace(/var CHECKSUM = .*;/,"");
+        string = string.replace(/var BUILDER  = .*;/,"");
+        string = string.replace(/\s/g,"");  //Remove all whitespace from the string.
+
+        for (i = 0; i < string.length; i++) {
+            chk += (string.charCodeAt(i) * i);
+        }
+
+        return chk;
+    },
+
+    _checkChecksum: function(container) {
+        var deferred = Ext.create('Deft.Deferred');
+        var me = this;
+
+        Ext.Ajax.request({
+            url: document.URL,
+            params: {
+                id: 1
+            },
+            success: function (response) {
+                text = response.responseText;
+                if ( CHECKSUM ) {
+                    var stored_checksum = me._generateChecksum(text);
+                    if ( CHECKSUM !== stored_checksum ) {
+                        deferred.resolve(false);
+                        return;
+                    }
+                }
+                deferred.resolve(true);
+            }
+        });
+
+        return deferred.promise;
+    },
+
+    _addToContainer: function(container){
+        var config = Ext.apply({
+            xtype:'container',
+            height: 200,
+            overflowY: true
+        }, this.informationalConfig);
+
+        container.add(config);
+    },
+
+    afterRender: function() {
+        var app = Rally.getApp();
+
+        if ( !Ext.isEmpty( this.informationalConfig ) ) {
+            var container = this.down('#information');
+            this._addToContainer(container);
+        }
+
+        if ( this.showLog && this.logger ) {
+            this.down('#button_box').add({
+                xtype:'rallybutton',
+                text:'Show Log',
+                listeners: {
+                    scope: this,
+                    click: function() {
+                        this.logger.displayLog();
+                    }
+                }
+            });
+        }
+
+        if (! app.isExternal() ) {
+            this._checkChecksum(app).then({
+                scope: this,
+                success: function(result){
+                    if ( !result ) {
+                        this.addDocked({
+                            xtype:'container',
+                            cls: 'build-info',
+                            dock: 'bottom',
+                            padding: 2,
+                            html:'<span class="icon-warning"> </span>Checksums do not match'
+                        });
+                    }
+                },
+                failure: function(msg){
+                    console.log("oops:",msg);
+                }
+            });
+        } else {
+            this.addDocked({
+                xtype:'container',
+                cls: 'build-info',
+                padding: 2,
+                dock: 'bottom',
+                html:'... Running externally'
+            });
+        }
+        this.callParent(arguments);
+    },
+
+    beforeRender: function() {
+        var me = this;
+        this.callParent(arguments);
+
+        if (this.informationHtml) {
+            this.addDocked({
+                xtype: 'component',
+                componentCls: 'intro-panel',
+                padding: 2,
+                html: this.informationHtml,
+                dock: 'bottom'
+            });
+        }
+
+        this.addDocked({
+            xtype:'container',
+            cls: 'build-info',
+            padding: 2,
+            dock:'bottom',
+            html:"This app was created by the CA AC Technical Services Team."
+        });
+
+        if ( APP_BUILD_DATE ) {
+            var build_html = Ext.String.format("Built on: {0} <br/>Built by: {1}",
+                APP_BUILD_DATE,
+                BUILDER);
+
+            if ( ARTIFACT ) {
+                build_html = build_html + "<br/>Source artifact: " + ARTIFACT;
+            }
+
+            this.addDocked({
+                xtype:'container',
+                cls: 'build-info',
+                padding: 2,
+                dock: 'top',
+                html: build_html
+            });
+        }
+    }
+});
+
+/*
+ * originally written for when we supported older versions of IE that wouldn't
+ * deal with console.log.
+ *
+ * Now allows for saving log.
+ */
+Ext.define('CArABU.technicalservices.Logger',{
+
+    saveForLater: false,
+    saveLines: 100,
+    logArray: [],
+
+    constructor: function(config){
+        Ext.apply(this,config);
+    },
+
+    setSaveForLater: function(saveme){
+        this.saveForLater = saveme;
+    },
+
+    log: function(args){
+        var timestamp = "[ " + Ext.util.Format.date(new Date(), "Y-m-d H:i:s.u") + " ]";
+
+        var output_args = [];
+        output_args = Ext.Array.push(output_args,[timestamp]);
+        output_args = Ext.Array.push(output_args, Ext.Array.slice(arguments,0));
+
+        if ( this.saveForLater ) {
+            if ( !this.logArray) {
+                this.logArray = [];
+            }
+            this.logArray.push(output_args.join(' '));
+
+            if ( this.logArray.length > this.saveLines ) {
+                this.logArray.shift();
+            }
+        }
+
+        window.console && console.log.apply(console,output_args);
+    },
+
+    getLogText: function() {
+        if ( ! this.logArray || this.logArray.length === 0 ) { return "-- no log --"; }
+        return this.logArray.join('<br/>');
+    } ,
+
+    displayLog: function() {
+        var text = this.getLogText();
+
+        this.popup = Ext.create('Rally.ui.dialog.Dialog', {
+            width      : Ext.getBody().getWidth() - 20,
+            height     : Ext.getBody().getHeight() - 20,
+            closable   : true,
+            title      : 'Log',
+            autoShow   : true,
+            layout     : 'border',
+            defaults   : {
+                layout : 'fit',
+                width  : '50%',
+                border : false
+            },
+            items: [{
+                region : 'center',
+                xtype: 'container',
+                html: text,
+                autoScroll: true
+            }]
+        });
+    }
+});
+
+Ext.define('TSUtilities', {
+
+    singleton: true,
+
+    loadWsapiRecords: function(config){
+        var deferred = Ext.create('Deft.Deferred');
+        var default_config = {
+            model: 'Defect',
+            fetch: ['ObjectID']
+        };
+        Ext.create('Rally.data.wsapi.Store', Ext.Object.merge(default_config,config)).load({
+            callback : function(records, operation, successful) {
+                if (successful){
+                    deferred.resolve(records);
+                } else {
+                    console.error("Failed: ", operation);
+                    deferred.reject('Problem loading: ' + operation.error.errors.join('. '));
+                }
+            }
+        });
+        return deferred.promise;
+    },
+
+    loadAStoreWithAPromise: function(model_name, model_fields){
+        var deferred = Ext.create('Deft.Deferred');
+
+        Ext.create('Rally.data.wsapi.Store', {
+            model: model_name,
+            fetch: model_fields
+        }).load({
+            callback : function(records, operation, successful) {
+                if (successful){
+                    deferred.resolve(this);
+                } else {
+                    console.error("Failed: ", operation);
+                    deferred.reject('Problem loading: ' + operation.error.errors.join('. '));
+                }
+            }
+        });
+        return deferred.promise;
+    }
+});
+
+Ext.define('CArABU.calculator.DefectTrendCalculator',{
+    extend: "Rally.data.lookback.calculator.TimeSeriesCalculator",
+
+    getMetrics: function () {
+        var activeStates = this.activeDefectStates,
+            closedStates = this.closedDefectStates;
+        console.log('activestates', activeStates);
+
+        return [{
+            field: "State",
+            as: "Total Active",
+            "f": "filteredCount",
+            "filterField": "State",
+            "filterValues": activeStates,
+            "display": "line",
+            "marker": {
+                enabled: false
+            }
+        },{
+            field: "State",
+            "as": "Done",
+            "f": "filteredCount",
+            "filterField": "State",
+            "filterValues": closedStates,
+            "display": "line",
+            "marker": {
+                enabled: false
+            }
+        },{
+            field: "State",
+            "as": "Not Reviewed",
+            "f": "filteredCount",
+            "filterField": "State",
+            "filterValues": ['Submitted'],
+            "display": "line",
+            "marker": {
+                enabled: false
+            }
+        },{
+            field: "State",
+            "as": "Total",
+            "f":"count",
+            "display": "line",
+            "marker": {
+                enabled: false
+            }
+        }];
+    },
+    
+    _buildSeriesConfig: function (calculatorConfig) {
+        var aggregationConfig = [],
+            metrics = calculatorConfig.metrics,
+            derivedFieldsAfterSummary = calculatorConfig.deriveFieldsAfterSummary;
+
+        for (var i = 0, ilength = metrics.length; i < ilength; i += 1) {
+            var metric = metrics[i];
+            if (metric.display) { //override so that it doesn't show metrics we don't want to
+                var metricData = {
+                    name: metric.as || metric.field,
+                    type: metric.display,
+                    dashStyle: metric.dashStyle || "Solid"
+                };
+                if (metric.marker){
+                    metricData.marker = metric.marker;
+                }
+                aggregationConfig.push(metricData);
+            }
+        }
+
+        for (var j = 0, jlength = derivedFieldsAfterSummary.length; j < jlength; j += 1) {
+            var derivedField = derivedFieldsAfterSummary[j];
+            aggregationConfig.push({
+                name: derivedField.as,
+                type: derivedField.display,
+                dashStyle: derivedField.dashStyle || "Solid"
+            });
+        }
+        console.log('aggregationConfig', aggregationConfig);
+        return aggregationConfig;
+    },
+
+});
+Ext.define("CArABU.app.TSApp.defect-trend-by-release", {
+    extend: 'Rally.app.App',
+    componentCls: 'app',
+    logger: new CArABU.technicalservices.Logger(),
+    defaults: { margin: 10 },
+
+    items: [
+        {xtype:'container',itemId:'selector_box',layout:{type:'hbox'}, margin: '10 10 50 10' },
+        {xtype:'container',itemId:'chart_box', margin: '50 10 10 10' }
+    ],
+
+    integrationHeaders : {
+        name : "CArABU.app.TSApp"
+    },
+    config: {
+        defaultSettings: {
+            showPatterns: false,
+            closedStateValues: ['Closed']
+        }
+    },
+    launch: function() {
+        var me = this;
+        this._fetchAllowedValues('Defect', 'State').then({
+            success: function(values){
+                this.states = values;
+                this._addSelector();
+            },
+            failure: function(msg){
+                Rally.ui.notify.Notifier.showError({ message: msg });
+            },
+            scope: this
+        });
+    },
+    _addSelector: function(){
+        var me = this;
+       
+        me.down('#selector_box').add([
+            {
+                xtype: 'rallyreleasecombobox',
+                name: 'releaseCombo',
+                itemId: 'releaseCombo',
+                stateful: true,
+                stateId: me.getContext().getScopedStateId('releaseCombo'),   
+                fieldLabel: 'Select Release:',
+                margin: '10 10 10 10', 
+                width: 450,
+                labelWidth: 100,
+                listeners:{
+                    change: function(cb){
+                        console.log(cb, cb.getRecord());
+                        me.startDate = cb.getRecord().get('ReleaseStartDate');
+                        me.endDate = cb.getRecord().get('ReleaseDate');
+                    }
+                }
+            },
+            {
+                xtype:'rallybutton',
+                name: 'updateButton',
+                itemId: 'updateButton',
+                margin: '10 10 10 10',
+                text: 'Update'
+                ,
+                listeners: {
+                    click: me._makeChart,
+                    scope: me
+                }
+            }
+        ]);
+    },
+
+
+    _makeChart: function() {
+        var me = this;
+        
+        //this.setLoading(true);
+        
+        this.setChart({
+            xtype: 'rallychart',
+            chartColors: ['red','green','blue','black'],
+            listeners: {
+                snapshotsAggregated: this.updateChartData,
+                scope: this
+            },
+            storeType: 'Rally.data.lookback.SnapshotStore',
+            storeConfig: {
+                find: this.getFilterFindConfig(),
+                fetch: ['State',"CreationDate"],
+                hydrate: ['State'],
+                limit: Infinity,
+                removeUnauthorizedSnapshots: true
+            },
+            calculatorType: 'CArABU.calculator.DefectTrendCalculator',
+            calculatorConfig: {
+                activeDefectStates: this.getActiveDefectStates(),
+                closedDefectStates: this.getClosedDefectStates(),
+                startDate: me.startDate,
+                endDate: me.endDate
+            },
+            chartConfig: {
+                chart: {
+                    type: 'xy'
+                },
+                title: {
+                    text: 'Defect Trend',
+                    style: {
+                        color: '#666',
+                        fontSize: '18px',
+                        fontFamily: 'ProximaNova',
+                        fill: '#666'
+                    }
+                },
+                xAxis: {
+                    tickmarkPlacement: 'on',
+                    tickInterval: 5,
+                    title: {
+                        text: 'Days',
+                        style: {
+                            color: '#444',
+                            fontFamily: 'ProximaNova',
+                            textTransform: 'uppercase',
+                            fill: '#444'
+                        }
+                    },
+                    plotLines: this.getPlotlines()
+                },
+                yAxis: [
+                    {
+                        min: 0,
+                        title: {
+                            text: 'Count',
+                            style: {
+                                color: '#444',
+                                fontFamily: 'ProximaNova',
+                                textTransform: 'uppercase',
+                                fill: '#444'
+                            }
+                        }
+                    }
+                ],
+                legend: {
+                    itemStyle: {
+                        color: '#444',
+                        fontFamily: 'ProximaNova',
+                        textTransform: 'uppercase'
+                    },
+                    borderWidth: 0
+                },
+                tooltip: {
+                    backgroundColor: 'lightgrey',
+                    headerFormat: '<span style="display:block;margin:0;padding:0 0 2px 0;text-align:center"><b style="font-family:NotoSansBold;color:white;">{point.key}</b></span><table><tbody>',
+                    footerFormat: '</tbody></table>',
+                    pointFormat: '<tr><td class="tooltip-label"><span style="color:{series.color};width=100px;">\u25CF</span> {series.name}</td><td class="tooltip-point">{point.y}</td></tr>',
+                    shared: true,
+                    useHTML: true,
+                    borderColor: '#444'
+                }
+            }
+        });
+    },
+    getPlotlines: function(){
+        var plotLines = [];
+
+        this.logger.log('getPlotlines', this.milestoneData);
+
+        Ext.Object.each(this.milestoneData, function(oid, data){
+            this.logger.log('getPlotlines', oid, data);
+            if (data.TargetDate){
+
+                var day = this.getStartDate(),
+                    dateIndex = 0;
+
+                while (data.TargetDate > day){
+                    day = Rally.util.DateTime.add(day, 'day', 1);
+                    if (day.getDay() > 0 && day.getDay() < 6){
+                        dateIndex++;
+                    }
+                }
+
+                var color = data.DisplayColor || "#F6F6F6",
+                    style = 'solid';
+                if (color === "##F6F6F6"){
+                    style = 'dash';
+                }
+                plotLines.push({
+                    color: color,
+                    dashStyle: style,
+                    width: 2,
+                    value: dateIndex-1,
+                    label: {
+                        rotation: 0,
+                        y: 15,
+                        style: {
+                            color: '#888',
+                            fontSize: '11px',
+                            fontFamily: 'ProximaNovaSemiBold',
+                            fill: '#888'
+                        },
+                        text: data.Name
+                    },
+                    zIndex: 3
+                });
+            }
+        }, this);
+        return plotLines;
+
+    },
+    getActiveDefectStates: function(){
+        return ['Open','Fixed'];
+    },
+    getClosedDefectStates: function(){
+        return ['Closed'];
+    },
+    updateChartData: function(chart){
+        var chartData = chart.getChartData();
+        console.log('chartDate', chartData);
+    },
+    getStartDate: function(){
+        return Rally.util.DateTime.add(new Date(), 'day', -30);
+    },
+    getFilterFindConfig: function(){
+
+
+        var findConfig = {
+            _TypeHierarchy: 'Defect'
+        };
+
+        this.logger.log('getFilterFindConfig', findConfig);
+        return findConfig;
+    },
+
+    
+    removeChart: function() {
+        var box = this.down('#chart_box');
+        box.removeAll();
+    },
+    
+    setChart: function(config) {
+        var box = this.down('#chart_box');
+        
+        this.removeChart();
+
+        var chart_config = Ext.apply({
+            xtype:'rallychart',
+            loadMask: false
+            // ,
+            // chartColors: CA.apps.charts.Colors.getConsistentBarColors()
+        }, config);
+        
+        box.add(chart_config);
+    },
+    _fetchAllowedValues: function(modelName, fieldName){
+        var deferred = Ext.create('Deft.Deferred');
+        Rally.data.ModelFactory.getModel({
+            type: modelName,
+            success: function(model) {
+                model.getField(fieldName).getAllowedValueStore().load({
+                    callback: function(records, operation, success) {
+                        this.logger.log('_fetchAllowedValues', records, operation);
+                        if (success){
+                            var vals = _.map(records, function(r){ return r.get('StringValue'); });
+                            deferred.resolve(vals);
+                        } else {
+                            deferred.reject("Error fetching category data");
+                        }
+                    },
+                    scope: this
+                });
+            },
+            scope: this
+        });
+        return deferred;
+    },
+
+    _displayGridGivenStore: function(store,field_names){
+        this.down('#grid_box1').add({
+            xtype: 'rallygrid',
+            store: store,
+            columnCfgs: field_names
+        });
+    },
+
+    _displayGridGivenRecords: function(records,field_names){
+        var store = Ext.create('Rally.data.custom.Store',{
+            data: records
+        });
+
+        var cols = Ext.Array.map(field_names, function(name){
+            return { dataIndex: name, text: name, flex: 1 };
+        });
+        this.down('#grid_box2').add({
+            xtype: 'rallygrid',
+            store: store,
+            columnCfgs: cols
+        });
+    },
+
+    getSettingsFields: function() {
+        var check_box_margins = '5 0 5 0';
+        return [{
+            name: 'saveLog',
+            xtype: 'rallycheckboxfield',
+            boxLabelAlign: 'after',
+            fieldLabel: '',
+            margin: check_box_margins,
+            boxLabel: 'Save Logging<br/><span style="color:#999999;"><i>Save last 100 lines of log for debugging.</i></span>'
+
+        }];
+    },
+
+    getOptions: function() {
+        var options = [
+            {
+                text: 'About...',
+                handler: this._launchInfo,
+                scope: this
+            }
+        ];
+
+        return options;
+    },
+
+    _launchInfo: function() {
+        if ( this.about_dialog ) { this.about_dialog.destroy(); }
+
+        this.about_dialog = Ext.create('Rally.technicalservices.InfoLink',{
+            showLog: this.getSetting('saveLog'),
+            logger: this.logger
+        });
+    },
+
+    isExternal: function(){
+        return typeof(this.getAppId()) == 'undefined';
+    },
+
+    _getTickInterval: function(granularity) {
+        if ( Ext.isEmpty(granularity) ) { return 30; }
+        
+        
+        granularity = granularity.toLowerCase();
+        if (this.timebox_limit < 30) {
+            return 1;
+        }
+        if ( granularity == 'day' ) { return 30; }
+        
+        return 1;
+        
+    }
+
+
+});
+
+
+               Rally.launchApp('CArABU.app.TSApp.defect-trend-by-release', {
+                   name: 'defect-trend-by-release'
+               });
+        });
+    </script>
+
+    <style type="text/css">
+
+.app {
+}
+.tsinfolink {
+    position:absolute;
+    right:0px;
+    width: 14px;
+    height: 14px;
+    border-radius: 7px;
+    text-align: center;
+    color: white;
+    background: #C0C0C0;
+    border-style: solid;
+    border-width: 1px;
+    margin-top: 25px;
+    margin-right: 5px;
+    cursor: pointer;
+}
+    </style>
+
+</head>
+<body></body>
+</html>

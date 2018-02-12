@@ -1,0 +1,7 @@
+{
+    "name": "defect-trend-by-release",
+    "sdk": "2.1",
+    "version": "0.1",
+    "className": "CArABU.app.TSApp.defect-trend-by-release",
+    "artifact": "US2022"
+}
