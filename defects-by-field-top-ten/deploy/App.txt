@@ -3,13 +3,13 @@
 <head>
     <title>CATS-Defects By Field Top Ten-0.1</title>
     <!--  (c) 2017 CA Technologies.  All Rights Reserved. -->
-    <!--  Build Date: Wed Feb 07 2018 17:16:59 GMT-0800 (PST) -->
+    <!--  Build Date: Wed Feb 14 2018 16:22:32 GMT-0800 (PST) -->
 
     <script type="text/javascript">
-        var APP_BUILD_DATE = "Wed Feb 07 2018 17:16:59 GMT-0800 (PST)";
+        var APP_BUILD_DATE = "Wed Feb 14 2018 16:22:32 GMT-0800 (PST)";
         var ARTIFACT = "US2163";
         var BUILDER  = "rajan08";
-        var CHECKSUM = 16587372665;
+        var CHECKSUM = 14570369799;
     </script>
 
     <script type="text/javascript" src="/apps/2.1/sdk.js"></script>
@@ -451,15 +451,10 @@ Ext.define('CArABU.app.DefectsByFieldSettings',{
 
 
         return [
-                // {
-        //     name: 'saveLog',
-        //     xtype: 'rallycheckboxfield',
-        //     boxLabelAlign: 'after',
-        //     fieldLabel: '',
-        //     margin: check_box_margins,
-        //     boxLabel: 'Save Logging<br/><span style="color:#999999;"><i>Save last 100 lines of log for debugging.</i></span>'
-
-        // },
+        // {
+        //     xtype:'colorpicker',
+        //     itemId: 'chartColor'
+        // },        
         {
             xtype: 'tsfieldoptionscombobox',
             name: 'bucketField',
@@ -471,76 +466,13 @@ Ext.define('CArABU.app.DefectsByFieldSettings',{
             allowNoEntry: false
         }
         ,{
-            xtype: 'rallycheckboxfield',
-            fieldLabel: 'Show top Ten',
+            xtype: 'rallynumberfield',
+            fieldLabel: 'Show top ',
             labelWidth: labelWidth,
-            width: width,
             labelAlign: 'right',
-            name: 'showTopTen'
+            name: 'showTopTen',
+            emptyText: 'Leave Blank to show all'
         }
-        //,
-        // {
-        //     xtype: 'tsfieldoptionscombobox',
-        //     name: 'stackField',
-        //     fieldLabel: 'Stacks',
-        //     model: settings.modelName,
-        //     labelWidth: labelWidth,
-        //     width: width,
-        //     labelAlign: 'right',
-        //     allowNoEntry: true,
-        //     noEntryText: '-- No Stacks --',
-        //     noEntryValue: null
-        // }
-        // ,
-        // {
-        //     xtype: 'checkboxgroup',
-        //     fieldLabel: 'Include States',
-        //     labelWidth: labelWidth,
-        //     width: width,
-        //     labelAlign: 'right',
-        //     columns: 2,
-        //     vertical: true,
-        //     margin: '15 0 15 0',
-        //     items: stateOptions
-
-        // }
-        // ,{
-        //     xtype: 'rallycheckboxfield',
-        //     fieldLabel: 'Include empty categories',
-        //     labelWidth: labelWidth,
-        //     width: width,
-        //     labelAlign: 'right',
-        //     name: 'showNoDataCategories'
-        // }
-        // ,{
-        //     xtype: 'textarea',
-        //     fieldLabel: 'Query',
-        //     name: 'query',
-        //     anchor: '100%',
-        //     cls: 'query-field',
-        //     labelAlign: 'right',
-        //     labelWidth: labelWidth,
-        //     margin: '0 70 0 0',
-        //     plugins: [
-        //         {
-        //             ptype: 'rallyhelpfield',
-        //             helpId: 194
-        //         },
-        //         'rallyfieldvalidationui'
-        //     ],
-        //     validateOnBlur: false,
-        //     validateOnChange: false,
-        //     validator: function(value) {
-        //         try {
-        //             if (value) {
-        //                 Rally.data.wsapi.Filter.fromQueryString(value);
-        //             }
-        //             return true;
-        //         } catch (e) {
-        //             return e.message;
-        //         }
-        //     }
-        // }
         ];
     }
 });
@@ -550,7 +482,6 @@ Ext.define("CArABU.app.TSApp", {
     componentCls: 'app',
     logger: new CArABU.technicalservices.Logger(),
     defaults: { margin: 10 },
-
 
     items: [
         {xtype:'container',itemId:'selector_box',layout:{type:'hbox'}, margin: '10 10 50 10' },
@@ -567,7 +498,8 @@ Ext.define("CArABU.app.TSApp", {
             noEntryText: '(No Entry)',
             query: '',
             showNoDataCategories: false,
-            showTopTen: true
+            showTopTen: 10,
+            chartColor: 'blue'
         }
     },
 
@@ -639,6 +571,13 @@ Ext.define("CArABU.app.TSApp", {
 
     _updateDisplay: function(){
         var me = this;
+        var cb = me.down('#releaseCombo');
+        //console.log(cb);
+        if(cb.valueModels.length == 0){
+            Rally.ui.notify.Notifier.showError({ message: "Please select one or more releases" });
+            return;
+        }
+
         me.down('#display_box').removeAll();
 
         if (!this._validateSettings(this.getSettings())){
@@ -696,7 +635,8 @@ Ext.define("CArABU.app.TSApp", {
             xtype: 'rallychart',
             loadMask: false,
             chartConfig: this._getChartConfig(records),
-            chartData: this._getChartData(records)
+            chartData: this._getChartData(records),
+            chartColors: [settings.chartColor]
         });
 
     },
@@ -792,10 +732,10 @@ Ext.define("CArABU.app.TSApp", {
             hash[bucket][stack]++;
         });
 
-        if(settings.showTopTen === 'true' || settings.showTopTen === true){
+        if(settings.showTopTen != '' && settings.showTopTen != null){
             var x = me._sortProperties(hash, 'Total', true, true);
             var hash_again = {}
-            var length = x.length < 10 ? x.length : 10;
+            var length = x.length < settings.showTopTen ? x.length : settings.showTopTen;
             for (i = 0; i < length ; i++) { 
                 hash_again[x[i][0]] = x[i][1]
             }
@@ -804,8 +744,6 @@ Ext.define("CArABU.app.TSApp", {
 
             hash = hash_again;            
         }
-
-
 
         var series = [],
             categories = _.keys(hash);
@@ -901,19 +839,6 @@ Ext.define("CArABU.app.TSApp", {
     getSettingsFields: function(){
         return CArABU.app.DefectsByFieldSettings.getFields(this.getSettings(), this.states);
     },
-
-    // getSettingsFields: function() {
-    //     var check_box_margins = '5 0 5 0';
-    //     return [{
-    //         name: 'saveLog',
-    //         xtype: 'rallycheckboxfield',
-    //         boxLabelAlign: 'after',
-    //         fieldLabel: '',
-    //         margin: check_box_margins,
-    //         boxLabel: 'Save Logging<br/><span style="color:#999999;"><i>Save last 100 lines of log for debugging.</i></span>'
-
-    //     }];
-    // },
 
     getOptions: function() {
         var options = [
