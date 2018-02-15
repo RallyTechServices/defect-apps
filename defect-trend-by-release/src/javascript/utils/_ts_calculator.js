@@ -28,7 +28,7 @@ Ext.define('CArABU.calculator.DefectTrendCalculator',{
             }
         },{
             field: "State",
-            "as": "Not Reviewed",
+            "as": "Submitted",
             "f": "filteredCount",
             "filterField": "State",
             "filterValues": ['Submitted'],

@@ -42,15 +42,26 @@ Ext.define("CArABU.app.TSApp.defect-trend-by-release", {
                 stateful: true,
                 stateId: me.getContext().getScopedStateId('releaseCombo'),   
                 fieldLabel: 'Select Release:',
+                multiSelect: true,
                 margin: '10 10 10 10', 
                 width: 450,
                 labelWidth: 100,
-                listeners:{
-                    change: function(cb){
-                        console.log(cb, cb.getRecord());
-                        me.startDate = cb.getRecord().get('ReleaseStartDate');
-                        me.endDate = cb.getRecord().get('ReleaseDate');
-                    }
+                cls: 'rally-checkbox-combobox',
+                valueField:'Name',
+                showArrows: false,
+                displayField: 'Name'
+                ,
+                listConfig: {
+                    cls: 'rally-checkbox-boundlist',
+                    itemTpl: Ext.create('Ext.XTemplate',
+                        '<div class="rally-checkbox-image"></div>',
+                        '{[this.getDisplay(values)]}</div>',
+                        {
+                            getDisplay: function(values){
+                                return values.Name;
+                            }
+                        }
+                    )
                 }
             },
             {
@@ -72,8 +83,28 @@ Ext.define("CArABU.app.TSApp.defect-trend-by-release", {
     _makeChart: function() {
         var me = this;
         
-        //this.setLoading(true);
-        
+
+        var cb = me.down('#releaseCombo');
+        //console.log(cb);
+        if(cb.valueModels.length == 0){
+            Rally.ui.notify.Notifier.showError({ message: "Please select one or more releases" });
+            return;
+        }
+
+        var dates = [];
+        var today = new Date();
+        Ext.Array.each(cb.valueModels, function(value){
+            dates.push(value.get('ReleaseStartDate'));
+            dates.push(value.get('ReleaseDate'));
+        })
+        dates.sort(function(a,b){return a.getTime() - b.getTime()});
+        //console.log(dates);
+        if(dates.length > 1){
+            var startDate = dates[0];
+            var endDate = dates[dates.length -1] > today ? today : dates[dates.length -1];                            
+        }
+
+        // me.setLoading(true);
         this.setChart({
             xtype: 'rallychart',
             chartColors: ['red','green','blue','black'],
@@ -93,8 +124,8 @@ Ext.define("CArABU.app.TSApp.defect-trend-by-release", {
             calculatorConfig: {
                 activeDefectStates: this.getActiveDefectStates(),
                 closedDefectStates: this.getClosedDefectStates(),
-                startDate: me.startDate,
-                endDate: me.endDate
+                startDate: startDate,
+                endDate: endDate
             },
             chartConfig: {
                 chart: {
@@ -109,9 +140,18 @@ Ext.define("CArABU.app.TSApp.defect-trend-by-release", {
                         fill: '#666'
                     }
                 },
+                subtitle: {
+                    text: Ext.util.Format.date(startDate) + ' - ' + Ext.util.Format.date(endDate),
+                    style: {
+                        color: '#666',
+                        fontSize: '12px',
+                        fontFamily: 'ProximaNova',
+                        fill: '#666'
+                    }
+                },                
                 xAxis: {
                     tickmarkPlacement: 'on',
-                    tickInterval: 5,
+                    //tickInterval: 5,
                     title: {
                         text: 'Days',
                         style: {
@@ -121,13 +161,15 @@ Ext.define("CArABU.app.TSApp.defect-trend-by-release", {
                             fill: '#444'
                         }
                     },
-                    plotLines: this.getPlotlines()
+                    dateTimeLabelFormats: {
+                        day: '%e of %b'
+                    }
                 },
                 yAxis: [
                     {
                         min: 0,
                         title: {
-                            text: 'Count',
+                            text: 'Defects Count',
                             style: {
                                 color: '#444',
                                 fontFamily: 'ProximaNova',
@@ -154,56 +196,20 @@ Ext.define("CArABU.app.TSApp.defect-trend-by-release", {
                     useHTML: true,
                     borderColor: '#444'
                 }
+                ,
+                loadMask:true
+                // ,
+                // listeners: {
+                //     chartRendered: function() {
+                //         me.setLoading(false);
+                //     },
+                //     scop:me
+                // }
             }
         });
+        // me.setLoading(false);
     },
-    getPlotlines: function(){
-        var plotLines = [];
-
-        this.logger.log('getPlotlines', this.milestoneData);
-
-        Ext.Object.each(this.milestoneData, function(oid, data){
-            this.logger.log('getPlotlines', oid, data);
-            if (data.TargetDate){
-
-                var day = this.getStartDate(),
-                    dateIndex = 0;
-
-                while (data.TargetDate > day){
-                    day = Rally.util.DateTime.add(day, 'day', 1);
-                    if (day.getDay() > 0 && day.getDay() < 6){
-                        dateIndex++;
-                    }
-                }
-
-                var color = data.DisplayColor || "#F6F6F6",
-                    style = 'solid';
-                if (color === "##F6F6F6"){
-                    style = 'dash';
-                }
-                plotLines.push({
-                    color: color,
-                    dashStyle: style,
-                    width: 2,
-                    value: dateIndex-1,
-                    label: {
-                        rotation: 0,
-                        y: 15,
-                        style: {
-                            color: '#888',
-                            fontSize: '11px',
-                            fontFamily: 'ProximaNovaSemiBold',
-                            fill: '#888'
-                        },
-                        text: data.Name
-                    },
-                    zIndex: 3
-                });
-            }
-        }, this);
-        return plotLines;
-
-    },
+    
     getActiveDefectStates: function(){
         return ['Open','Fixed'];
     },
@@ -219,9 +225,11 @@ Ext.define("CArABU.app.TSApp.defect-trend-by-release", {
     },
     getFilterFindConfig: function(){
 
+        me = this;
 
         var findConfig = {
-            _TypeHierarchy: 'Defect'
+            _TypeHierarchy: 'Defect',
+            _ProjectHierarchy: me.getContext().getProject().ObjectID
         };
 
         this.logger.log('getFilterFindConfig', findConfig);
@@ -239,14 +247,14 @@ Ext.define("CArABU.app.TSApp.defect-trend-by-release", {
         
         this.removeChart();
 
-        var chart_config = Ext.apply({
-            xtype:'rallychart',
-            loadMask: false
-            // ,
-            // chartColors: CA.apps.charts.Colors.getConsistentBarColors()
-        }, config);
+        // var chart_config = Ext.apply({
+        //     xtype:'rallychart',
+        //     //loadMask: true
+        //     // ,
+        //     // chartColors: CA.apps.charts.Colors.getConsistentBarColors()
+        // }, config);
         
-        box.add(chart_config);
+        box.add(config);
     },
     _fetchAllowedValues: function(modelName, fieldName){
         var deferred = Ext.create('Deft.Deferred');
@@ -269,29 +277,6 @@ Ext.define("CArABU.app.TSApp.defect-trend-by-release", {
             scope: this
         });
         return deferred;
-    },
-
-    _displayGridGivenStore: function(store,field_names){
-        this.down('#grid_box1').add({
-            xtype: 'rallygrid',
-            store: store,
-            columnCfgs: field_names
-        });
-    },
-
-    _displayGridGivenRecords: function(records,field_names){
-        var store = Ext.create('Rally.data.custom.Store',{
-            data: records
-        });
-
-        var cols = Ext.Array.map(field_names, function(name){
-            return { dataIndex: name, text: name, flex: 1 };
-        });
-        this.down('#grid_box2').add({
-            xtype: 'rallygrid',
-            store: store,
-            columnCfgs: cols
-        });
     },
 
     getSettingsFields: function() {
@@ -331,20 +316,4 @@ Ext.define("CArABU.app.TSApp.defect-trend-by-release", {
     isExternal: function(){
         return typeof(this.getAppId()) == 'undefined';
     },
-
-    _getTickInterval: function(granularity) {
-        if ( Ext.isEmpty(granularity) ) { return 30; }
-        
-        
-        granularity = granularity.toLowerCase();
-        if (this.timebox_limit < 30) {
-            return 1;
-        }
-        if ( granularity == 'day' ) { return 30; }
-        
-        return 1;
-        
-    }
-
-
 });
