@@ -3,13 +3,13 @@
 <head>
     <title>CATS-defect-trend-by-release-0.1</title>
     <!--  (c) 2017 CA Technologies.  All Rights Reserved. -->
-    <!--  Build Date: Wed Feb 14 2018 16:23:02 GMT-0800 (PST) -->
+    <!--  Build Date: Fri Feb 23 2018 17:09:51 GMT-0800 (PST) -->
 
     <script type="text/javascript">
-        var APP_BUILD_DATE = "Wed Feb 14 2018 16:23:02 GMT-0800 (PST)";
+        var APP_BUILD_DATE = "Fri Feb 23 2018 17:09:51 GMT-0800 (PST)";
         var ARTIFACT = "US2022";
         var BUILDER  = "rajan08";
-        var CHECKSUM = 8571936534;
+        var CHECKSUM = 8669529901;
     </script>
 
     <script type="text/javascript" src="/apps/2.1/sdk.js"></script>
@@ -449,7 +449,7 @@ Ext.define("CArABU.app.TSApp.defect-trend-by-release", {
                 name: 'releaseCombo',
                 itemId: 'releaseCombo',
                 stateful: true,
-                stateId: me.getContext().getScopedStateId('releaseCombo'),   
+                stateId: 'releaseCombo-defect-trend',   
                 fieldLabel: 'Select Release:',
                 multiSelect: true,
                 margin: '10 10 10 10', 
@@ -512,6 +512,8 @@ Ext.define("CArABU.app.TSApp.defect-trend-by-release", {
             var startDate = dates[0];
             var endDate = dates[dates.length -1] > today ? today : dates[dates.length -1];                            
         }
+        var ti = Math.round(Rally.util.DateTime.getDifference(endDate, startDate, 'day') / 10);
+        console.log('ti:',ti)
 
         // me.setLoading(true);
         this.setChart({
@@ -550,7 +552,7 @@ Ext.define("CArABU.app.TSApp.defect-trend-by-release", {
                     }
                 },
                 subtitle: {
-                    text: Ext.util.Format.date(startDate) + ' - ' + Ext.util.Format.date(endDate),
+                    text: Ext.util.Format.date(endDate) + ' - ' + Ext.util.Format.date(startDate),
                     style: {
                         color: '#666',
                         fontSize: '12px',
@@ -560,7 +562,7 @@ Ext.define("CArABU.app.TSApp.defect-trend-by-release", {
                 },                
                 xAxis: {
                     tickmarkPlacement: 'on',
-                    //tickInterval: 5,
+                    tickInterval: ti,
                     title: {
                         text: 'Days',
                         style: {
