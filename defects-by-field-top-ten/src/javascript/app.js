@@ -51,7 +51,7 @@ Ext.define("CArABU.app.TSApp", {
                 name: 'releaseCombo',
                 itemId: 'releaseCombo',
                 stateful: true,
-                stateId: me.getContext().getScopedStateId('releaseCombo'),   
+                stateId: 'releaseCombo-defect-top-ten',   
                 fieldLabel: 'Select Release:',
                 multiSelect: true,
                 margin: '10 10 10 10', 

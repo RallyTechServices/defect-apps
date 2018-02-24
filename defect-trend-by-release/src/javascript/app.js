@@ -40,7 +40,7 @@ Ext.define("CArABU.app.TSApp.defect-trend-by-release", {
                 name: 'releaseCombo',
                 itemId: 'releaseCombo',
                 stateful: true,
-                stateId: me.getContext().getScopedStateId('releaseCombo'),   
+                stateId: 'releaseCombo-defect-trend',   
                 fieldLabel: 'Select Release:',
                 multiSelect: true,
                 margin: '10 10 10 10', 
@@ -103,6 +103,8 @@ Ext.define("CArABU.app.TSApp.defect-trend-by-release", {
             var startDate = dates[0];
             var endDate = dates[dates.length -1] > today ? today : dates[dates.length -1];                            
         }
+        var ti = Math.round(Rally.util.DateTime.getDifference(endDate, startDate, 'day') / 10);
+        console.log('ti:',ti)
 
         // me.setLoading(true);
         this.setChart({
@@ -141,7 +143,7 @@ Ext.define("CArABU.app.TSApp.defect-trend-by-release", {
                     }
                 },
                 subtitle: {
-                    text: Ext.util.Format.date(startDate) + ' - ' + Ext.util.Format.date(endDate),
+                    text: Ext.util.Format.date(endDate) + ' - ' + Ext.util.Format.date(startDate),
                     style: {
                         color: '#666',
                         fontSize: '12px',
@@ -151,7 +153,7 @@ Ext.define("CArABU.app.TSApp.defect-trend-by-release", {
                 },                
                 xAxis: {
                     tickmarkPlacement: 'on',
-                    //tickInterval: 5,
+                    tickInterval: ti,
                     title: {
                         text: 'Days',
                         style: {

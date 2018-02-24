@@ -15,12 +15,29 @@ Ext.define('CArABU.app.DefectsByFieldSettings',{
             return { boxLabel: s, name: 'allowedStates', inputValue: s, checked: checked };
         });
 
+        var colors = Ext.create('Ext.data.Store', {
+            fields: ['Name'],
+            data : [{Name:'Black'}, {Name:'Grey'}, {Name:'Yellow'}, {Name:'Red'}, {Name:'Blue'}, {Name:'Green'}, {Name:'Brown'}, {Name:'Pink'}, {Name:'Orange'}, {Name:'Purple'}]
+        });
+
 
         return [
         // {
         //     xtype:'colorpicker',
         //     itemId: 'chartColor'
-        // },        
+        // },
+        {
+            xtype: 'combobox',
+            name: 'chartColor',            
+            fieldLabel: 'Choose Color',
+            store: colors,
+            labelWidth: labelWidth,
+            labelAlign: 'right',
+            width: width,            
+            queryMode: 'local',
+            displayField: 'Name',
+            valueField: 'Name'            
+        },
         {
             xtype: 'tsfieldoptionscombobox',
             name: 'bucketField',
@@ -37,6 +54,7 @@ Ext.define('CArABU.app.DefectsByFieldSettings',{
             labelWidth: labelWidth,
             labelAlign: 'right',
             name: 'showTopTen',
+
             emptyText: 'Leave Blank to show all'
         }
         ];

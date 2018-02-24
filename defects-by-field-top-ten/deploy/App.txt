@@ -3,13 +3,13 @@
 <head>
     <title>CATS-Defects By Field Top Ten-0.1</title>
     <!--  (c) 2017 CA Technologies.  All Rights Reserved. -->
-    <!--  Build Date: Wed Feb 14 2018 16:22:32 GMT-0800 (PST) -->
+    <!--  Build Date: Fri Feb 23 2018 17:10:14 GMT-0800 (PST) -->
 
     <script type="text/javascript">
-        var APP_BUILD_DATE = "Wed Feb 14 2018 16:22:32 GMT-0800 (PST)";
+        var APP_BUILD_DATE = "Fri Feb 23 2018 17:10:14 GMT-0800 (PST)";
         var ARTIFACT = "US2163";
         var BUILDER  = "rajan08";
-        var CHECKSUM = 14570369799;
+        var CHECKSUM = 15184281451;
     </script>
 
     <script type="text/javascript" src="/apps/2.1/sdk.js"></script>
@@ -449,12 +449,29 @@ Ext.define('CArABU.app.DefectsByFieldSettings',{
             return { boxLabel: s, name: 'allowedStates', inputValue: s, checked: checked };
         });
 
+        var colors = Ext.create('Ext.data.Store', {
+            fields: ['Name'],
+            data : [{Name:'Black'}, {Name:'Grey'}, {Name:'Yellow'}, {Name:'Red'}, {Name:'Blue'}, {Name:'Green'}, {Name:'Brown'}, {Name:'Pink'}, {Name:'Orange'}, {Name:'Purple'}]
+        });
+
 
         return [
         // {
         //     xtype:'colorpicker',
         //     itemId: 'chartColor'
-        // },        
+        // },
+        {
+            xtype: 'combobox',
+            name: 'chartColor',            
+            fieldLabel: 'Choose Color',
+            store: colors,
+            labelWidth: labelWidth,
+            labelAlign: 'right',
+            width: width,            
+            queryMode: 'local',
+            displayField: 'Name',
+            valueField: 'Name'            
+        },
         {
             xtype: 'tsfieldoptionscombobox',
             name: 'bucketField',
@@ -471,6 +488,7 @@ Ext.define('CArABU.app.DefectsByFieldSettings',{
             labelWidth: labelWidth,
             labelAlign: 'right',
             name: 'showTopTen',
+
             emptyText: 'Leave Blank to show all'
         }
         ];
@@ -530,7 +548,7 @@ Ext.define("CArABU.app.TSApp", {
                 name: 'releaseCombo',
                 itemId: 'releaseCombo',
                 stateful: true,
-                stateId: me.getContext().getScopedStateId('releaseCombo'),   
+                stateId: 'releaseCombo-defect-top-ten',   
                 fieldLabel: 'Select Release:',
                 multiSelect: true,
                 margin: '10 10 10 10', 
