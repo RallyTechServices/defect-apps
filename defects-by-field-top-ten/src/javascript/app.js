@@ -156,8 +156,9 @@ Ext.define("CArABU.app.TSApp", {
             xtype: 'rallychart',
             loadMask: false,
             chartConfig: this._getChartConfig(records),
-            chartData: this._getChartData(records),
-            chartColors: [settings.chartColor]
+            chartData: this._getChartData(records)
+            // ,
+            // chartColors: [settings.chartColor]
         });
 
     },
@@ -290,26 +291,23 @@ Ext.define("CArABU.app.TSApp", {
     _showError: function(msg){
         Rally.ui.notify.Notifier.showError(msg);
     },
+
     _getStoreConfig: function(settings){
         var fetch = settings.alwaysFetch.concat([settings.bucketField]);
-        // if (settings.stackField){
-        //     fetch.push(settings.stackField);
-        // }
+        if (settings.stackField){
+            fetch.push(settings.stackField);
+        }
 
-        // var filters = _.map(this._getAllowedStates(), function(state){ return {property: 'State', value: state}; });
-        // filters = Rally.data.wsapi.Filter.or(filters);
+        var filters = _.map(this._getAllowedStates(), function(state){ return {property: 'State', value: state}; });
+        filters = Rally.data.wsapi.Filter.or(filters);
 
-        // if (settings.query && settings.query.length > 0){
-        //     var queryFilter = Rally.data.wsapi.Filter.fromQueryString(settings.query);
-        //     this.logger.log('_getStoreConfig -> query filter:', queryFilter.toString(), 'allowed state filter:', filters.toString());
-        //     filters = filters.and(queryFilter);
-        // }
+        if (settings.query && settings.query.length > 0){
+            var queryFilter = Rally.data.wsapi.Filter.fromQueryString(settings.query);
+            this.logger.log('_getStoreConfig -> query filter:', queryFilter.toString(), 'allowed state filter:', filters.toString());
+            filters = filters.and(queryFilter);
+        }
 
-        var config = {
-            model: settings.modelName,
-            fetch: fetch,
-            limit: 'Infinity'
-        };
+        this.logger.log('_getStoreConfig', filters.toString(), fetch);
 
         var r_filters = [];
         Ext.Array.each(this.down('#releaseCombo').value, function(rel){
@@ -318,15 +316,25 @@ Ext.define("CArABU.app.TSApp", {
                 value: rel
             })
         });
-        if(r_filters.length > 0){
-            r_filters = Rally.data.wsapi.Filter.or(r_filters)
-            config['filters'] = r_filters;            
-        }
 
-        this.logger.log('_getStoreConfig', r_filters && r_filters.toString(), fetch);
+        r_filters = Rally.data.wsapi.Filter.or(r_filters);
+
+        this.logger.log('Release filters', r_filters.toString());
+
+        filters = filters.and(r_filters);
+
+        var config = {
+            model: settings.modelName,
+            fetch: fetch,
+            limit: 'Infinity',
+            filters: filters
+        };
+
+        this.logger.log('_getStoreConfig', filters && filters.toString(), fetch);
 
         return config;
     },
+
     _validateSettings: function(settings){
 
         if (this._getAllowedStates().length > 0){

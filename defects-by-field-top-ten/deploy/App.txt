@@ -3,13 +3,13 @@
 <head>
     <title>CATS-Defects By Field Top Ten-0.1</title>
     <!--  (c) 2017 CA Technologies.  All Rights Reserved. -->
-    <!--  Build Date: Fri Feb 23 2018 17:10:14 GMT-0800 (PST) -->
+    <!--  Build Date: Sun Jul 22 2018 14:32:49 GMT-0700 (PDT) -->
 
     <script type="text/javascript">
-        var APP_BUILD_DATE = "Fri Feb 23 2018 17:10:14 GMT-0800 (PST)";
+        var APP_BUILD_DATE = "Sun Jul 22 2018 14:32:49 GMT-0700 (PDT)";
         var ARTIFACT = "US2163";
         var BUILDER  = "rajan08";
-        var CHECKSUM = 15184281451;
+        var CHECKSUM = 16977418886;
     </script>
 
     <script type="text/javascript" src="/apps/2.1/sdk.js"></script>
@@ -449,10 +449,10 @@ Ext.define('CArABU.app.DefectsByFieldSettings',{
             return { boxLabel: s, name: 'allowedStates', inputValue: s, checked: checked };
         });
 
-        var colors = Ext.create('Ext.data.Store', {
-            fields: ['Name'],
-            data : [{Name:'Black'}, {Name:'Grey'}, {Name:'Yellow'}, {Name:'Red'}, {Name:'Blue'}, {Name:'Green'}, {Name:'Brown'}, {Name:'Pink'}, {Name:'Orange'}, {Name:'Purple'}]
-        });
+        // var colors = Ext.create('Ext.data.Store', {
+        //     fields: ['Name'],
+        //     data : [{Name:'Black'}, {Name:'Grey'}, {Name:'Yellow'}, {Name:'Red'}, {Name:'Blue'}, {Name:'Green'}, {Name:'Brown'}, {Name:'Pink'}, {Name:'Orange'}, {Name:'Purple'}]
+        // });
 
 
         return [
@@ -460,18 +460,18 @@ Ext.define('CArABU.app.DefectsByFieldSettings',{
         //     xtype:'colorpicker',
         //     itemId: 'chartColor'
         // },
-        {
-            xtype: 'combobox',
-            name: 'chartColor',            
-            fieldLabel: 'Choose Color',
-            store: colors,
-            labelWidth: labelWidth,
-            labelAlign: 'right',
-            width: width,            
-            queryMode: 'local',
-            displayField: 'Name',
-            valueField: 'Name'            
-        },
+        // {
+        //     xtype: 'combobox',
+        //     name: 'chartColor',            
+        //     fieldLabel: 'Choose Color',
+        //     store: colors,
+        //     labelWidth: labelWidth,
+        //     labelAlign: 'right',
+        //     width: width,            
+        //     queryMode: 'local',
+        //     displayField: 'Name',
+        //     valueField: 'Name'            
+        // },
         {
             xtype: 'tsfieldoptionscombobox',
             name: 'bucketField',
@@ -481,7 +481,37 @@ Ext.define('CArABU.app.DefectsByFieldSettings',{
             width: width,
             model: settings.modelName,
             allowNoEntry: false
+        }, {
+            xtype: 'tsfieldoptionscombobox',
+            name: 'stackField',
+            fieldLabel: 'Stacks',
+            model: settings.modelName,
+            labelWidth: labelWidth,
+            width: width,
+            labelAlign: 'right',
+            allowNoEntry: true,
+            noEntryText: '-- No Stacks --',
+            noEntryValue: null
+        },{
+            xtype: 'checkboxgroup',
+            fieldLabel: 'Include States',
+            labelWidth: labelWidth,
+            width: width,
+            labelAlign: 'right',
+            columns: 2,
+            vertical: true,
+            margin: '15 0 15 0',
+            items: stateOptions
+
         }
+        // ,{
+        //     xtype: 'rallycheckboxfield',
+        //     fieldLabel: 'Include empty categories',
+        //     labelWidth: labelWidth,
+        //     width: width,
+        //     labelAlign: 'right',
+        //     name: 'showNoDataCategories'
+        // }
         ,{
             xtype: 'rallynumberfield',
             fieldLabel: 'Show top ',
@@ -490,6 +520,34 @@ Ext.define('CArABU.app.DefectsByFieldSettings',{
             name: 'showTopTen',
 
             emptyText: 'Leave Blank to show all'
+        },{
+            xtype: 'textarea',
+            fieldLabel: 'Query',
+            name: 'query',
+            anchor: '100%',
+            cls: 'query-field',
+            labelAlign: 'right',
+            labelWidth: labelWidth,
+            margin: '0 70 0 0',
+            plugins: [
+                {
+                    ptype: 'rallyhelpfield',
+                    helpId: 194
+                },
+                'rallyfieldvalidationui'
+            ],
+            validateOnBlur: false,
+            validateOnChange: false,
+            validator: function(value) {
+                try {
+                    if (value) {
+                        Rally.data.wsapi.Filter.fromQueryString(value);
+                    }
+                    return true;
+                } catch (e) {
+                    return e.message;
+                }
+            }
         }
         ];
     }
@@ -653,8 +711,9 @@ Ext.define("CArABU.app.TSApp", {
             xtype: 'rallychart',
             loadMask: false,
             chartConfig: this._getChartConfig(records),
-            chartData: this._getChartData(records),
-            chartColors: [settings.chartColor]
+            chartData: this._getChartData(records)
+            // ,
+            // chartColors: [settings.chartColor]
         });
 
     },
@@ -787,26 +846,23 @@ Ext.define("CArABU.app.TSApp", {
     _showError: function(msg){
         Rally.ui.notify.Notifier.showError(msg);
     },
+
     _getStoreConfig: function(settings){
         var fetch = settings.alwaysFetch.concat([settings.bucketField]);
-        // if (settings.stackField){
-        //     fetch.push(settings.stackField);
-        // }
+        if (settings.stackField){
+            fetch.push(settings.stackField);
+        }
 
-        // var filters = _.map(this._getAllowedStates(), function(state){ return {property: 'State', value: state}; });
-        // filters = Rally.data.wsapi.Filter.or(filters);
+        var filters = _.map(this._getAllowedStates(), function(state){ return {property: 'State', value: state}; });
+        filters = Rally.data.wsapi.Filter.or(filters);
 
-        // if (settings.query && settings.query.length > 0){
-        //     var queryFilter = Rally.data.wsapi.Filter.fromQueryString(settings.query);
-        //     this.logger.log('_getStoreConfig -> query filter:', queryFilter.toString(), 'allowed state filter:', filters.toString());
-        //     filters = filters.and(queryFilter);
-        // }
+        if (settings.query && settings.query.length > 0){
+            var queryFilter = Rally.data.wsapi.Filter.fromQueryString(settings.query);
+            this.logger.log('_getStoreConfig -> query filter:', queryFilter.toString(), 'allowed state filter:', filters.toString());
+            filters = filters.and(queryFilter);
+        }
 
-        var config = {
-            model: settings.modelName,
-            fetch: fetch,
-            limit: 'Infinity'
-        };
+        this.logger.log('_getStoreConfig', filters.toString(), fetch);
 
         var r_filters = [];
         Ext.Array.each(this.down('#releaseCombo').value, function(rel){
@@ -815,15 +871,25 @@ Ext.define("CArABU.app.TSApp", {
                 value: rel
             })
         });
-        if(r_filters.length > 0){
-            r_filters = Rally.data.wsapi.Filter.or(r_filters)
-            config['filters'] = r_filters;            
-        }
 
-        this.logger.log('_getStoreConfig', r_filters && r_filters.toString(), fetch);
+        r_filters = Rally.data.wsapi.Filter.or(r_filters);
+
+        this.logger.log('Release filters', r_filters.toString());
+
+        filters = filters.and(r_filters);
+
+        var config = {
+            model: settings.modelName,
+            fetch: fetch,
+            limit: 'Infinity',
+            filters: filters
+        };
+
+        this.logger.log('_getStoreConfig', filters && filters.toString(), fetch);
 
         return config;
     },
+
     _validateSettings: function(settings){
 
         if (this._getAllowedStates().length > 0){
