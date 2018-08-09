@@ -20,7 +20,7 @@ Ext.define("CArABU.app.TSApp", {
             query: '',
             showNoDataCategories: false,
             showTopTen: 10,
-            chartColor: 'blue'
+            chartColor: '{"State" : {"Submitted":"Blue", "Open": "Red", "Fixed":"Yellow", "Closed":"Green"}}'
         }
     },
 
@@ -274,8 +274,23 @@ Ext.define("CArABU.app.TSApp", {
             categories = this.allCategories || categories;
         }
 
+        var colors_hash = null;
+
+        try {
+            colors_hash = JSON.parse(settings.chartColor)
+        }
+        catch(err) {
+            console.log("Can not parse chartColors");
+            colors_hash = null
+        }
+
+        colors_hash = colors_hash && colors_hash[settings.stackField] || null;
+
         _.each(stacks, function(stack){
             var obj = { name: stack, data: [] }
+            if(colors_hash){
+                obj["color"] = colors_hash[stack];
+            }
             _.each(categories, function(bucket){
                 var val = hash[bucket] && hash[bucket][stack] || 0;
                 obj.data.push(val);
