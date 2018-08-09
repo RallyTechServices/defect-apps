@@ -15,23 +15,8 @@ Ext.define('CArABU.app.DefectsByFieldSettings',{
             return { boxLabel: s, name: 'allowedStates', inputValue: s, checked: checked };
         });
 
-        // var colors = Ext.create('Ext.data.Store', {
-        //     fields: ['Name'],
-        //     data : [{Name:'Black'}, {Name:'Grey'}, {Name:'Yellow'}, {Name:'Red'}, {Name:'Blue'}, {Name:'Green'}, {Name:'Brown'}, {Name:'Pink'}, {Name:'Orange'}, {Name:'Purple'}]
-        // });
-
-
         return [
 
-        {
-            xtype: 'textarea',
-            name: 'chartColor',            
-            fieldLabel: 'Enter color for the Stacked field',
-            labelWidth: labelWidth,
-            labelAlign: 'right',
-            width: width,
-            height: 200       
-        },
         {
             xtype: 'tsfieldoptionscombobox',
             name: 'bucketField',
@@ -64,14 +49,6 @@ Ext.define('CArABU.app.DefectsByFieldSettings',{
             items: stateOptions
 
         }
-        // ,{
-        //     xtype: 'rallycheckboxfield',
-        //     fieldLabel: 'Include empty categories',
-        //     labelWidth: labelWidth,
-        //     width: width,
-        //     labelAlign: 'right',
-        //     name: 'showNoDataCategories'
-        // }
         ,{
             xtype: 'rallynumberfield',
             fieldLabel: 'Show top ',
@@ -108,6 +85,14 @@ Ext.define('CArABU.app.DefectsByFieldSettings',{
                     return e.message;
                 }
             }
+        },{
+            xtype: 'textarea',
+            name: 'chartColor',            
+            fieldLabel: 'Enter color for the Stacked field',
+            labelWidth: labelWidth,
+            labelAlign: 'right',
+            width: width,
+            height: 200       
         }
         ];
     }
