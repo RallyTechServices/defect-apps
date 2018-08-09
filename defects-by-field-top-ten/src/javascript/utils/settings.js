@@ -22,22 +22,16 @@ Ext.define('CArABU.app.DefectsByFieldSettings',{
 
 
         return [
-        // {
-        //     xtype:'colorpicker',
-        //     itemId: 'chartColor'
-        // },
-        // {
-        //     xtype: 'combobox',
-        //     name: 'chartColor',            
-        //     fieldLabel: 'Choose Color',
-        //     store: colors,
-        //     labelWidth: labelWidth,
-        //     labelAlign: 'right',
-        //     width: width,            
-        //     queryMode: 'local',
-        //     displayField: 'Name',
-        //     valueField: 'Name'            
-        // },
+
+        {
+            xtype: 'textarea',
+            name: 'chartColor',            
+            fieldLabel: 'Enter color for the Stacked field',
+            labelWidth: labelWidth,
+            labelAlign: 'right',
+            width: width,
+            height: 200       
+        },
         {
             xtype: 'tsfieldoptionscombobox',
             name: 'bucketField',
